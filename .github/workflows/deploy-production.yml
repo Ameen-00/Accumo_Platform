@@ -1,0 +1,28 @@
+# Production. Only main. Never a feature branch.
+# One compose stack per customer (see PULSE-ARCHITECTURE.md).
+
+name: deploy-production
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Production deploy
+        run: |
+          echo "Production deploy of ${GITHUB_SHA}"
+          echo "Customer stacks are single-tenant. Do not roll everyone from this job until there are customers."
+          echo "India: ap-south-1. UAE: me-central-1. Same image, different .env."

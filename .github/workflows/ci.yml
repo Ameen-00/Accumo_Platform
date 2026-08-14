@@ -1,0 +1,29 @@
+# Runs on every pull request into staging or main.
+# A red X here means do not merge.
+
+name: ci
+
+on:
+  pull_request:
+    branches: [staging, main]
+  workflow_call:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install -r requirements.txt
+      - name: Test
+        run: python -m pytest -q
+      - name: No leaked payloads
+        run: |
+          if git grep -n -I -E 'sk_live|BEGIN RSA PRIVATE KEY|AKIA[0-9A-Z]{16}' -- ':!.github/**' ; then
+            echo "Possible secret in tree"
+            exit 1
+          fi
