@@ -15,7 +15,7 @@ apps/api/               FastAPI — serves every product
 apps/pulse/             payment-integrity catalogue + (later) rules
 apps/atlas/             later
 apps/snip/              later
-web/                    React, routes per product
+web/                    Pulse reviewer app (import, findings, pack)
 tests/synthetic/        planted exceptions — the only allowed “customer” data
 docker/                 compose, Caddy, India / UAE env examples
 ```
@@ -60,6 +60,16 @@ API (after Postgres is up):
 $env:PYTHONPATH = "packages/foundation;packages/canonical;packages/ingest;packages/rules;apps/pulse;apps/api"
 uvicorn app.main:app --reload --app-dir apps/api
 ```
+
+Reviewer app (API already running):
+
+```powershell
+cd web
+npm install
+npm run dev
+```
+
+Open http://localhost:5173 — import → run → confirm/dismiss → download pack. This is the product. The page on accumo.co/pulse is only a sales demo.
 
 ## Workflow
 
