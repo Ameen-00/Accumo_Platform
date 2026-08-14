@@ -19,21 +19,23 @@ def persist_findings(
     *,
     organisation_id: uuid.UUID,
     batch_id: uuid.UUID,
-    rule_code: str,
-    findings: list[Finding],
+    by_rule: dict[str, list[Finding]],
 ) -> Run:
-    version = db.scalar(
-        select(RuleVersion).where(RuleVersion.rule_code == rule_code, RuleVersion.active.is_(True))
-    )
-    if version is None:
-        raise RuntimeError(f"No active version for {rule_code}")
+    versions: dict[str, RuleVersion] = {}
+    for rule_code in by_rule:
+        version = db.scalar(
+            select(RuleVersion).where(RuleVersion.rule_code == rule_code, RuleVersion.active.is_(True))
+        )
+        if version is None:
+            raise RuntimeError(f"No active version for {rule_code}")
+        versions[rule_code] = version
 
     now = datetime.now(timezone.utc)
     run = Run(
         organisation_id=organisation_id,
         batch_id=batch_id,
         status="running",
-        rule_versions={rule_code: str(version.id)},
+        rule_versions={code: str(ver.id) for code, ver in versions.items()},
         started_at=now,
         stats={},
     )
@@ -41,43 +43,47 @@ def persist_findings(
     db.flush()
 
     created = updated = 0
-    for finding in findings:
-        fp = fingerprint(rule_code, *finding.fingerprint_parts)
-        existing = db.scalar(
-            select(ExceptionRow).where(
-                ExceptionRow.organisation_id == organisation_id,
-                ExceptionRow.fingerprint == fp,
+    total = 0
+    for rule_code, findings in by_rule.items():
+        version = versions[rule_code]
+        total += len(findings)
+        for finding in findings:
+            fp = fingerprint(rule_code, *finding.fingerprint_parts)
+            existing = db.scalar(
+                select(ExceptionRow).where(
+                    ExceptionRow.organisation_id == organisation_id,
+                    ExceptionRow.fingerprint == fp,
+                )
             )
-        )
-        if existing:
-            existing.amount_at_risk = finding.amount_at_risk
-            existing.explanation = finding.explanation
-            existing.evidence = finding.evidence
-            existing.run_id = run.id
-            updated += 1
-            continue
-        db.add(
-            ExceptionRow(
-                organisation_id=organisation_id,
-                run_id=run.id,
-                rule_code=rule_code,
-                rule_version_id=version.id,
-                fingerprint=fp,
-                status="new",
-                amount_at_risk=finding.amount_at_risk,
-                currency=finding.currency,
-                confidence=finding.confidence,
-                vendor_identity_id=_maybe_uuid(finding.evidence.get("vendor_identity_id")),
-                title=finding.title,
-                explanation=finding.explanation,
-                evidence=finding.evidence,
+            if existing:
+                existing.amount_at_risk = finding.amount_at_risk
+                existing.explanation = finding.explanation
+                existing.evidence = finding.evidence
+                existing.run_id = run.id
+                updated += 1
+                continue
+            db.add(
+                ExceptionRow(
+                    organisation_id=organisation_id,
+                    run_id=run.id,
+                    rule_code=rule_code,
+                    rule_version_id=version.id,
+                    fingerprint=fp,
+                    status="new",
+                    amount_at_risk=finding.amount_at_risk,
+                    currency=finding.currency,
+                    confidence=finding.confidence,
+                    vendor_identity_id=_maybe_uuid(finding.evidence.get("vendor_identity_id")),
+                    title=finding.title,
+                    explanation=finding.explanation,
+                    evidence=finding.evidence,
+                )
             )
-        )
-        created += 1
+            created += 1
 
     run.status = "complete"
     run.finished_at = datetime.now(timezone.utc)
-    run.stats = {"created": created, "updated": updated, "findings": len(findings)}
+    run.stats = {"created": created, "updated": updated, "findings": total}
     return run
 
 
