@@ -19,6 +19,7 @@ from accumo_foundation.config import get_settings
 from accumo_ingest.load import load_rows
 from accumo_ingest.mapping import ENTITIES, missing_required, suggest_all
 from accumo_ingest.parse import parse_path, parse_upload
+from accumo_canonical.resolve import resolve_new_vendors
 from accumo_ingest.validate import needs_date_format, validate
 
 router = APIRouter(prefix="/imports", tags=["imports"])
@@ -271,6 +272,8 @@ def commit_import(
                 country_code=settings.country_code,
             )
             counts[src.entity] = counts.get(src.entity, 0) + n
+        identities = resolve_new_vendors(db, batch.organisation_id)
+        counts["identities"] = identities
         batch.row_counts = counts
         batch.status = "loaded"
         write(

@@ -8,7 +8,7 @@ from accumo_canonical.models import Base
 from accumo_foundation.config import get_settings
 from accumo_pulse.seed import seed_dev_admin, seed_rules
 
-from app.routers import auth, health, imports
+from app.routers import auth, health, identities, imports
 
 
 @asynccontextmanager
@@ -49,6 +49,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(auth.router)
     app.include_router(imports.router)
+    app.include_router(identities.router)
     return app
 
 
