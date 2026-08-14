@@ -17,13 +17,18 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
+          cache-dependency-path: requirements.txt
       - name: Install
         run: pip install -r requirements.txt
       - name: Test
         run: python -m pytest -q
       - name: No leaked payloads
         run: |
-          if git grep -n -I -E 'sk_live|BEGIN RSA PRIVATE KEY|AKIA[0-9A-Z]{16}' -- ':!.github/**' ; then
+          set +e
+          git grep -n -I -E 'sk_live|BEGIN RSA PRIVATE KEY|AKIA[0-9A-Z]{16}' -- ':!.github/**'
+          found=$?
+          set -e
+          if [ "$found" -eq 0 ]; then
             echo "Possible secret in tree"
             exit 1
           fi
