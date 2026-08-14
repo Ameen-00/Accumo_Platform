@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from accumo_canonical.db import engine, get_db, init_engine
+from accumo_canonical.db import get_db, init_engine
 from accumo_canonical.models import Base
 from accumo_foundation.config import get_settings
 from accumo_pulse.seed import seed_dev_admin, seed_rules
@@ -16,9 +16,8 @@ async def lifespan(_: FastAPI):
     settings = get_settings()
     if settings.env == "prod" and settings.secret_key.startswith("dev-only"):
         raise RuntimeError("SECRET_KEY must be set in production")
-    init_engine()
-    assert engine is not None
-    Base.metadata.create_all(bind=engine)
+    bound = init_engine()
+    Base.metadata.create_all(bind=bound)
     db = next(get_db())
     try:
         seed_rules(db)

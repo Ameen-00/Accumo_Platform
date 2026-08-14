@@ -20,7 +20,7 @@ def seed_rules(db: Session) -> None:
             db.add(RuleVersion(rule_code=code, version=1, params=params, active=True))
 
 
-def seed_dev_admin(db: Session, email: str = "admin@pulse.local", password: str = "change-me-now") -> AppUser:
+def seed_dev_admin(db: Session, email: str = "admin@example.com", password: str = "change-me-now") -> AppUser:
     settings = get_settings()
     org = db.scalar(select(Organisation))
     if not org:

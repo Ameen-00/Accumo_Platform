@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY packages ./packages
 COPY apps ./apps
 
+RUN mkdir -p /data/uploads /data/reports && chown -R accumo:accumo /data
 USER accumo
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \

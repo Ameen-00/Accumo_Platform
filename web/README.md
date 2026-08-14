@@ -16,7 +16,7 @@ npm run dev
 
 Open http://localhost:5173. Vite proxies `/auth`, `/imports`, `/runs`, `/exceptions`, `/reports` to the API.
 
-An operator creates the login. There is no self-serve signup. In local `ENV=dev` the API seeds `admin@pulse.local`.
+An operator creates the login. There is no self-serve signup. In local `ENV=dev` the API seeds `admin@example.com` (never use this on a customer box).
 
 ## Build
 
