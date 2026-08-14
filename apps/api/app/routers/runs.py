@@ -4,12 +4,10 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from accumo_canonical.db import get_db
-from accumo_canonical.models import AppUser, Exception as ExceptionRow
-from accumo_canonical.models import ImportBatch, Run
+from accumo_canonical.models import AppUser, ImportBatch, Run
 from accumo_foundation.audit import write
 from accumo_foundation.auth import current_user, require_roles
 from accumo_pulse.execute import run_dup_exact
@@ -66,38 +64,4 @@ def get_run(
         "status": run.status,
         "stats": run.stats,
         "rule_versions": run.rule_versions,
-    }
-
-
-@router.get("/exceptions")
-def list_exceptions(
-    db: Session = Depends(get_db),
-    user: AppUser = Depends(current_user),
-    status: str | None = None,
-    rule: str | None = None,
-):
-    stmt = select(ExceptionRow).where(ExceptionRow.organisation_id == user.organisation_id)
-    if status:
-        stmt = stmt.where(ExceptionRow.status == status)
-    if rule:
-        stmt = stmt.where(ExceptionRow.rule_code == rule)
-    stmt = stmt.order_by(ExceptionRow.amount_at_risk.desc())
-    rows = db.scalars(stmt).all()
-    identified = sum((r.amount_at_risk for r in rows), start=0)
-    return {
-        "identified": str(identified),
-        "count": len(rows),
-        "exceptions": [
-            {
-                "id": str(r.id),
-                "rule": r.rule_code,
-                "status": r.status,
-                "title": r.title,
-                "amount_at_risk": str(r.amount_at_risk),
-                "currency": r.currency,
-                "confidence": str(r.confidence),
-                "explanation": r.explanation,
-            }
-            for r in rows
-        ],
     }
