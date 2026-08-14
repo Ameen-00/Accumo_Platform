@@ -23,10 +23,12 @@ engine = None
 SessionLocal = None
 
 
-def init_engine() -> None:
+def init_engine():
+    """Return the live engine. Callers must use the return value, not a copied import."""
     global engine, SessionLocal
     engine = _engine()
     SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+    return engine
 
 
 def get_db() -> Generator[Session, None, None]:

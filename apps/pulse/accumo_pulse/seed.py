@@ -8,17 +8,7 @@ from sqlalchemy.orm import Session
 from accumo_canonical.models import AppUser, Organisation, Rule, RuleVersion
 from accumo_foundation.auth import hash_password
 from accumo_foundation.config import get_settings
-
-RULES = [
-    ("DUP_EXACT", "Exact duplicate payment", "Same vendor, same invoice, same amount, paid more than once.", "recovery", {"window_days": 365}),
-    ("DUP_FUZZY", "Probable duplicate", "Same vendor and amount, invoice numbers almost match.", "recovery", {"window_days": 90, "min_similarity": 85}),
-    ("DUP_VENDOR", "Duplicate vendor master", "One real supplier living under two vendor codes.", "risk", {}),
-    ("BANK_CHANGE_PAY", "Bank detail changed, then paid", "Vendor account changed and a payment followed.", "risk", {"window_days": 30}),
-    ("NO_PO", "Payment without PO or receipt", "Paid where process required a PO or GRN.", "risk", {"min_amount": None, "require_grn": True}),
-    ("THRESHOLD", "Approval limit circumvention", "Several payments just under a limit, same vendor, short window.", "risk", {"thresholds": [], "window_days": 30, "min_count": 3}),
-    ("VENDOR_IS_EMPLOYEE", "Vendor bank matches payroll", "A vendor is paid into an employee account.", "risk", {}),
-    ("CREDIT_UNAPPLIED", "Credit note never applied", "Credit issued, still open, vendor still being paid.", "recovery", {"min_age_days": 60}),
-]
+from accumo_pulse.catalogue import RULES
 
 
 def seed_rules(db: Session) -> None:
@@ -30,7 +20,7 @@ def seed_rules(db: Session) -> None:
             db.add(RuleVersion(rule_code=code, version=1, params=params, active=True))
 
 
-def seed_dev_admin(db: Session, email: str = "admin@pulse.local", password: str = "change-me-now") -> AppUser:
+def seed_dev_admin(db: Session, email: str = "admin@example.com", password: str = "change-me-now") -> AppUser:
     settings = get_settings()
     org = db.scalar(select(Organisation))
     if not org:

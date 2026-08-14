@@ -1,0 +1,29 @@
+# Test environment. Fires after CI is green on staging.
+# Wire the actual host when the first staging box exists.
+# Until then this job records the intent and fails closed if tests fail.
+
+name: deploy-staging
+
+on:
+  push:
+    branches: [staging]
+
+concurrency:
+  group: staging
+  cancel-in-progress: false
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - name: Staging deploy
+        run: |
+          echo "Staging deploy of ${GITHUB_SHA}"
+          echo "When the box exists: docker compose -f docker/docker-compose.yml pull && up -d"
+          echo "Region for the shared test stack: ap-south-1. Synthetic data only."

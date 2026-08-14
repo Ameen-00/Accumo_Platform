@@ -1,0 +1,51 @@
+# Runs on every pull request into staging or main.
+# A red X here means do not merge.
+
+name: ci
+
+on:
+  pull_request:
+    branches: [staging, main]
+  workflow_call:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-ci.txt
+      - name: Install
+        run: pip install -r requirements-ci.txt
+      - name: Test
+        run: python -m pytest -q
+      - name: No leaked payloads
+        run: |
+          set +e
+          git grep -n -I -E 'sk_live|BEGIN RSA PRIVATE KEY|AKIA[0-9A-Z]{16}' -- ':!.github/**'
+          found=$?
+          set -e
+          if [ "$found" -eq 0 ]; then
+            echo "Possible secret in tree"
+            exit 1
+          fi
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build

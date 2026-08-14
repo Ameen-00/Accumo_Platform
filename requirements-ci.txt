@@ -1,0 +1,5 @@
+# Only what the test suite imports. Full stack is requirements.txt.
+pytest==8.3.5
+cryptography>=44.0.0
+pydantic-settings>=2.8.0
+rapidfuzz>=3.13.0
