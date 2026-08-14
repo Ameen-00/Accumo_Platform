@@ -7,18 +7,17 @@ import time
 
 from sqlalchemy import text
 
-from accumo_canonical.db import engine, init_engine
+from accumo_canonical.db import init_engine
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s worker %(message)s")
 log = logging.getLogger("accumo.worker")
 
 
 def loop() -> None:
-    init_engine()
-    assert engine is not None
+    bound = init_engine()
     log.info("worker up")
     while True:
-        with engine.begin() as conn:
+        with bound.begin() as conn:
             row = conn.execute(
                 text(
                     """
