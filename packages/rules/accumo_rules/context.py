@@ -17,3 +17,25 @@ class AllocatedPayment:
     payment_date: date
     vendor_identity_id: UUID
     vendor_name: str
+
+
+@dataclass(frozen=True)
+class BankObservation:
+    vendor_id: UUID
+    vendor_identity_id: UUID
+    vendor_name: str
+    account_norm: str
+    observed_from: date
+    bank_id: UUID | None = None
+
+
+@dataclass(frozen=True)
+class PaymentToBank:
+    payment_id: UUID
+    vendor_id: UUID
+    vendor_identity_id: UUID
+    vendor_name: str
+    account_norm: str
+    payment_date: date
+    amount: Decimal
+    currency: str
