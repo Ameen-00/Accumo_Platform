@@ -1,9 +1,31 @@
-# Web
+# Pulse web
 
-One React + Vite + TypeScript app. Routes per product:
+The reviewer app. Not a dashboard. Money at the top.
 
-- `/pulse` — exceptions, import, identity review
-- `/atlas` — later
-- `/snip` — later
+```
+sign in → import CSV → run rules → confirm / dismiss → download pack
+```
 
-Week 2 starts the import mapping screen. Do not add a dashboard of charts.
+## Run (API must already be up on :8000)
+
+```powershell
+cd web
+npm install
+npm run dev
+```
+
+Open http://localhost:5173. Vite proxies `/auth`, `/imports`, `/runs`, `/exceptions`, `/reports` to the API.
+
+An operator creates the login. There is no self-serve signup. In local `ENV=dev` the API seeds `admin@pulse.local`.
+
+## Build
+
+```powershell
+npm run build
+```
+
+`dist/` is gitignored. A later single-tenant deploy serves this folder behind Caddy next to the API.
+
+## What this is not
+
+The page on accumo.co/pulse is a **browser sales demo**. This app is the product. It talks to the real API and stores nothing in the browser except the session cookie.
