@@ -276,15 +276,15 @@ def render_html(pack: EvidencePack) -> str:
         f"<tr><td>{esc(k)}</td><td>{esc(v)}</td></tr>" for k, v in pack.row_counts.items()
     )
     rules = "".join(
-        f"<tr><td>{esc(r.code)}</td><td>{esc(r.name)}</td>"
-        f"<td>{esc(r.version)}</td><td class='mono'>{esc(r.params)}</td></tr>"
+        f"<tr><td>{esc(r.name)}</td><td class='mono'>{esc(r.code)}</td>"
+        f"<td>v{esc(r.version)}</td><td class='muted'>{esc(r.params)}</td></tr>"
         for r in pack.rules
     ) or "<tr><td colspan='4'>No rules recorded on this run.</td></tr>"
     summary = "".join(
         f"<tr><td>{esc(s.code)}</td>"
-        f"<td>{s.identified_count} / {esc(money(pack.currency, s.identified_amount))}</td>"
-        f"<td>{s.confirmed_count} / {esc(money(pack.currency, s.confirmed_amount))}</td>"
-        f"<td>{s.recovered_count} / {esc(money(pack.currency, s.recovered_amount))}</td></tr>"
+        f"<td>{s.identified_count}<br><span class='amt'>{esc(money(pack.currency, s.identified_amount))}</span></td>"
+        f"<td>{s.confirmed_count}<br><span class='amt'>{esc(money(pack.currency, s.confirmed_amount))}</span></td>"
+        f"<td>{s.recovered_count}<br><span class='amt'>{esc(money(pack.currency, s.recovered_amount))}</span></td></tr>"
         for s in pack.by_rule
     ) or "<tr><td colspan='4'>No exceptions in this run.</td></tr>"
     findings = []
@@ -295,14 +295,15 @@ def render_html(pack: EvidencePack) -> str:
     for item in pack.findings:
         findings.append(
             "<article class='finding'>"
+            f"<div class='finding-top'><span class='tag'>{esc(item.rule_code)}</span>"
+            f"<span class='tag quiet'>{esc(item.status)}</span>"
+            f"<strong class='amt'>{esc(money(item.currency, item.amount))}</strong></div>"
             f"<h3>{esc(item.title)}</h3>"
-            f"<p class='meta'>{esc(item.rule_code)} · {esc(item.status)} · "
-            f"{esc(money(item.currency, item.amount))} · confidence {esc(item.confidence)}</p>"
             f"<p>{esc(_why(item.explanation))}</p>"
             "</article>"
         )
     disp = "".join(
-        f"<tr><td>{esc(d.at.isoformat() if d.at else '')}</td>"
+        f"<tr><td>{esc(d.at.strftime('%d %b %Y %H:%M') if d.at else '')}</td>"
         f"<td>{esc(d.actor)}</td><td>{esc(d.rule_code)}</td>"
         f"<td>{esc(d.from_status or '—')} → {esc(d.to_status)}</td>"
         f"<td>{esc(d.reason or '')}</td>"
@@ -310,6 +311,7 @@ def render_html(pack: EvidencePack) -> str:
         for d in pack.dispositions
     ) or "<tr><td colspan='6'>No dispositions recorded.</td></tr>"
     limits = "".join(f"<li>{esc(line)}</li>" for line in pack.limitations)
+    when = pack.generated_at.strftime("%d %b %Y, %H:%M UTC")
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -317,59 +319,100 @@ def render_html(pack: EvidencePack) -> str:
   <meta charset="utf-8"/>
   <title>Pulse evidence pack · {esc(pack.organisation_name)}</title>
   <style>
-    body {{ font: 12px/1.45 Georgia, serif; color: #111; margin: 32px 40px; max-width: 880px; }}
-    h1 {{ font-size: 22px; margin-bottom: 4px; }}
-    h2 {{ font-size: 15px; border-bottom: 1px solid #222; padding-bottom: 4px; margin-top: 28px; }}
-    .headline {{ font-size: 16px; font-weight: 700; margin: 16px 0; }}
-    .meta, .mono {{ font-family: Consolas, "Courier New", monospace; font-size: 11px; }}
-    table {{ border-collapse: collapse; width: 100%; margin: 8px 0 16px; }}
-    th, td {{ border: 1px solid #ccc; padding: 4px 6px; text-align: left; vertical-align: top; }}
-    th {{ background: #f3f3f3; }}
-    .limits {{ background: #fff8e6; border: 1px solid #c9a227; padding: 12px 16px; }}
-    .finding {{ margin: 12px 0 20px; }}
+    :root {{ --navy:#14204A; --ink:#0D1330; --muted:#5C6480; --line:#E1E5EF; --ok:#157A5B; --paper:#F7F8FA; --warn:#FBF3E4; --warn-line:#D4A017; }}
+    * {{ box-sizing: border-box; }}
+    body {{ font: 15px/1.5 "Segoe UI", Calibri, Helvetica, Arial, sans-serif; color: var(--ink); margin: 0; background: var(--paper); }}
+    .wrap {{ max-width: 860px; margin: 0 auto; padding: 36px 32px 64px; background: #fff; }}
+    .brand {{ color: var(--navy); font-weight: 700; letter-spacing: 0.04em; font-size: 12px; text-transform: uppercase; }}
+    h1 {{ font-size: 28px; letter-spacing: -0.03em; margin: 6px 0 8px; color: var(--navy); }}
+    h2 {{ font-size: 17px; color: var(--navy); border-bottom: 2px solid var(--navy); padding-bottom: 6px; margin: 36px 0 12px; }}
+    .lede {{ color: var(--muted); margin: 0 0 20px; }}
+    .cards {{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 20px 0 8px; }}
+    .card {{ border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }}
+    .card .k {{ font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }}
+    .card .v {{ font-size: 18px; font-weight: 700; margin-top: 4px; letter-spacing: -0.03em; }}
+    .card .s {{ font-size: 12px; color: var(--muted); margin-top: 4px; }}
+    .card.ok .v {{ color: var(--ok); }}
+    .headline {{ display: none; }}
+    .meta, .mono {{ font-family: Consolas, "Courier New", monospace; font-size: 11px; color: var(--muted); word-break: break-all; }}
+    .muted {{ color: var(--muted); font-size: 13px; }}
+    .amt {{ font-variant-numeric: tabular-nums; font-weight: 600; }}
+    table {{ border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 13px; }}
+    th, td {{ border-bottom: 1px solid var(--line); padding: 8px 6px; text-align: left; vertical-align: top; }}
+    th {{ color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }}
+    .limits {{ background: var(--warn); border: 1px solid var(--warn-line); padding: 14px 18px; border-radius: 10px; }}
+    .limits ul {{ margin: 8px 0 0; padding-left: 18px; }}
+    .finding {{ border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 0 0 12px; }}
+    .finding h3 {{ margin: 6px 0 6px; font-size: 16px; }}
+    .finding-top {{ display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }}
+    .tag {{ background: #E7EBF6; color: var(--navy); font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }}
+    .tag.quiet {{ background: #EEE; color: var(--muted); }}
+    @media print {{ body {{ background: #fff; }} .wrap {{ padding: 0; }} }}
   </style>
 </head>
 <body>
-  <h1>Pulse evidence pack</h1>
-  <p class="meta">{esc(pack.organisation_name)} · {esc(pack.country_code)} · run {esc(pack.run_id)}</p>
-  <p class="headline">{esc(pack.headline)}</p>
-  <p>Period {esc(pack.period_label)}. Generated {esc(pack.generated_at.isoformat())} by {esc(pack.generated_by)}.</p>
+  <div class="wrap">
+    <div class="brand">Accumo · Pulse</div>
+    <h1>Evidence pack</h1>
+    <p class="lede">{esc(pack.organisation_name)} · {esc(pack.country_code)} · period {esc(pack.period_label)}<br>
+    Prepared {esc(when)} by {esc(pack.generated_by)}. Run {esc(pack.run_id)}</p>
+    <p class="headline">{esc(pack.headline)}</p>
+    <div class="cards">
+      <div class="card">
+        <div class="k">Identified</div>
+        <div class="v">{esc(money(pack.currency, pack.identified))}</div>
+        <div class="s">Flagged by the rules. Not yet agreed.</div>
+      </div>
+      <div class="card">
+        <div class="k">Confirmed</div>
+        <div class="v">{esc(money(pack.currency, pack.confirmed))}</div>
+        <div class="s">A reviewer said this is real.</div>
+      </div>
+      <div class="card ok">
+        <div class="k">Recovered</div>
+        <div class="v">{esc(money(pack.currency, pack.recovered))}</div>
+        <div class="s">Money recorded as back.</div>
+      </div>
+    </div>
 
-  <h2>2. Scope</h2>
-  <p>What was loaded for this run. Hashes are SHA-256 of the files as received.</p>
-  <table>
-    <tr><th>Entity</th><th>File</th><th>Rows</th><th>SHA-256</th></tr>
-    {files}
-  </table>
-  <table>
-    <tr><th>Loaded as</th><th>Count</th></tr>
-    {counts}
-  </table>
+    <h2>2. Scope — what we looked at</h2>
+    <p class="muted">Files as received. The hash is so you can prove it was this file, not another.</p>
+    <table>
+      <tr><th>List</th><th>File</th><th>Rows</th><th>SHA-256</th></tr>
+      {files}
+    </table>
+    <table>
+      <tr><th>Loaded as</th><th>Count</th></tr>
+      {counts}
+    </table>
 
-  <h2>3. Rules applied</h2>
-  <table>
-    <tr><th>Code</th><th>Name</th><th>Version</th><th>Parameters</th></tr>
-    {rules}
-  </table>
+    <h2>3. Rules applied</h2>
+    <p class="muted">Only these tests ran. A missing rule is not a clean result — see limitations.</p>
+    <table>
+      <tr><th>What it looks for</th><th>Code</th><th>Version</th><th>Settings</th></tr>
+      {rules}
+    </table>
 
-  <h2>4. Summary</h2>
-  <table>
-    <tr><th>Rule</th><th>Identified</th><th>Confirmed</th><th>Recovered</th></tr>
-    {summary}
-  </table>
+    <h2>4. Summary</h2>
+    <table>
+      <tr><th>Rule</th><th>Identified</th><th>Confirmed</th><th>Recovered</th></tr>
+      {summary}
+    </table>
 
-  <h2>5. Findings (confirmed)</h2>
-  {''.join(findings)}
+    <h2>5. Findings (confirmed)</h2>
+    {''.join(findings)}
 
-  <h2>6. Dispositions</h2>
-  <table>
-    <tr><th>When</th><th>Who</th><th>Rule</th><th>Decision</th><th>Reason</th><th>Recovered</th></tr>
-    {disp}
-  </table>
+    <h2>6. Dispositions — who decided what</h2>
+    <table>
+      <tr><th>When</th><th>Who</th><th>Rule</th><th>Decision</th><th>Reason</th><th>Recovered</th></tr>
+      {disp}
+    </table>
 
-  <h2>7. Limitations — what this pack could not test</h2>
-  <div class="limits">
-    <ul>{limits}</ul>
+    <h2>7. Limitations — what this pack could not test</h2>
+    <div class="limits">
+      <p><strong>Read this before you treat silence as a clean book.</strong></p>
+      <ul>{limits}</ul>
+    </div>
   </div>
 </body>
 </html>
@@ -494,6 +537,7 @@ def render_pdf(pack: EvidencePack) -> bytes:
     doc.gap(6)
     doc.text(pack.headline, 12)
     doc.gap(4)
+    doc.text("Identified = flagged. Confirmed = a reviewer agreed. Recovered = money back.")
     doc.text(f"Period {pack.period_label}")
     doc.text(f"Generated {pack.generated_at.isoformat()} by {pack.generated_by}")
 

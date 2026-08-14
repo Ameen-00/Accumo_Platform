@@ -1,16 +1,37 @@
 import { useState } from "react";
 import { api, type FileUploadResult } from "./api";
 
-const ENTITIES = [
-  { id: "vendor", label: "Vendors" },
-  { id: "invoice", label: "Invoices" },
-  { id: "payment", label: "Payments" },
-  { id: "credit_note", label: "Credit notes" },
+const SLOTS = [
+  { id: "vendor", label: "1. Vendors", hint: "Name and code / GSTIN if you have it", need: true },
+  { id: "invoice", label: "2. Invoices", hint: "Invoice number, date, amount", need: true },
+  { id: "payment", label: "3. Payments", hint: "Date, amount, which invoice", need: true },
+  { id: "credit_note", label: "Credit notes (optional)", hint: "Only if you have them", need: false },
 ] as const;
+
+const FIELD_OPTIONS: { id: string; label: string }[] = [
+  { id: "", label: "— ignore this column —" },
+  { id: "vendor.name", label: "Vendor name" },
+  { id: "vendor.source_ref", label: "Vendor code" },
+  { id: "vendor.tax_id", label: "GSTIN / tax id" },
+  { id: "vendor.registration_id", label: "PAN / registration" },
+  { id: "invoice.invoice_number", label: "Invoice number" },
+  { id: "invoice.invoice_date", label: "Invoice date" },
+  { id: "invoice.gross_amount", label: "Invoice amount" },
+  { id: "invoice.source_ref", label: "Invoice id" },
+  { id: "invoice.currency", label: "Currency" },
+  { id: "payment.amount", label: "Payment amount" },
+  { id: "payment.payment_date", label: "Payment date" },
+  { id: "payment.invoice_ref", label: "Paid against invoice" },
+  { id: "payment.account", label: "Bank account paid to" },
+  { id: "payment.source_ref", label: "Payment id" },
+  { id: "payment.reference", label: "UTR / cheque / ref" },
+  { id: "credit_note.amount", label: "Credit amount" },
+  { id: "credit_note.note_date", label: "Credit date" },
+  { id: "credit_note.source_ref", label: "Credit note id" },
+];
 
 export function ImportDesk({ onRan }: { onRan: (runId: string) => void }) {
   const [batchId, setBatchId] = useState<string | null>(null);
-  const [entity, setEntity] = useState<string>("payment");
   const [dateFormat, setDateFormat] = useState("ymd");
   const [files, setFiles] = useState<FileUploadResult[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
@@ -24,166 +45,162 @@ export function ImportDesk({ onRan }: { onRan: (runId: string) => void }) {
     return created.id;
   }
 
+  const have = new Set(files.map((f) => f.entity));
+  const ready = ["vendor", "invoice", "payment"].every((id) => have.has(id));
+
   return (
     <div className="main">
       <section className="panel">
-        <h2>1. Load the books</h2>
+        <h2>Load the books</h2>
         <p className="hint" style={{ marginTop: 0 }}>
-          CSV or Excel. One file per list. Map columns, then commit. Dates that look like 03/07/2026
-          need you to say day-first (India) or month-first. We will not guess.
+          Three files. We guess the columns; you only fix a wrong guess. If a date looks like
+          03/07/2026, say whether the day comes first.
         </p>
-        <div className="drop">
-          <select value={entity} onChange={(e) => setEntity(e.target.value)}>
-            {ENTITIES.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.label}
-              </option>
-            ))}
+        <label className="inline">
+          How dates are written
+          <select value={dateFormat} onChange={(e) => setDateFormat(e.target.value)}>
+            <option value="ymd">2025-06-02 (year first)</option>
+            <option value="dmy">02/06/2025 (India — day first)</option>
+            <option value="mdy">06/02/2025 (month first)</option>
           </select>
-          <input
-            type="file"
-            accept=".csv,.xlsx,.xls"
-            onChange={async (ev) => {
-              const file = ev.target.files?.[0];
-              ev.target.value = "";
-              if (!file) return;
-              setBusy(true);
-              setErr(null);
-              try {
-                const id = await ensureBatch();
-                const uploaded = await api.uploadFile(id, entity, file);
-                setFiles((prev) => [...prev.filter((f) => f.entity !== uploaded.entity), uploaded]);
-              } catch (ex) {
-                setErr(ex instanceof Error ? ex.message : "Upload failed");
-              } finally {
-                setBusy(false);
-              }
-            }}
-          />
-          <label>
-            Date format{" "}
-            <select value={dateFormat} onChange={(e) => setDateFormat(e.target.value)}>
-              <option value="ymd">yyyy-mm-dd</option>
-              <option value="dmy">dd/mm/yyyy (India)</option>
-              <option value="mdy">mm/dd/yyyy</option>
-            </select>
-          </label>
-        </div>
-        {err && <p className="err">{err}</p>}
-        {msg && <p className="hint">{msg}</p>}
+        </label>
       </section>
 
-      {files.map((f) => (
-        <section className="panel" key={f.id}>
-          <h2>
-            {f.filename} · {f.entity} · {f.row_count} rows
-          </h2>
-          {f.missing.length > 0 && (
-            <p className="err">Still need: {f.missing.join(", ")}</p>
-          )}
-          <table>
-            <thead>
-              <tr>
-                <th>Column in file</th>
-                <th>Maps to</th>
-              </tr>
-            </thead>
-            <tbody>
-              {f.headers.map((h) => (
-                <tr key={h}>
-                  <td>{h}</td>
-                  <td>
-                    <input
-                      className="field"
-                      value={f.mapping[h] ?? ""}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        setFiles((prev) =>
-                          prev.map((row) =>
-                            row.id === f.id
-                              ? { ...row, mapping: { ...row.mapping, [h]: value } }
-                              : row,
-                          ),
-                        );
-                      }}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="btn-row" style={{ marginTop: "0.75rem" }}>
-            <button
-              className="btn btn-ghost"
-              disabled={busy}
-              onClick={async () => {
-                if (!batchId) return;
-                setBusy(true);
-                setErr(null);
-                try {
-                  const res = await api.mapFile(batchId, f.id, f.mapping, dateFormat);
-                  setMsg(
-                    res.ok
-                      ? `${f.filename} mapped.`
-                      : `${res.errors.length} validation issue(s) — fix the file or mapping.`,
-                  );
-                } catch (ex) {
-                  setErr(ex instanceof Error ? ex.message : "Map failed");
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              Confirm mapping
-            </button>
-          </div>
-        </section>
-      ))}
+      {SLOTS.map((slot) => {
+        const uploaded = files.find((f) => f.entity === slot.id);
+        return (
+          <section className="panel" key={slot.id}>
+            <div className="slot-head">
+              <div>
+                <h2>{slot.label}</h2>
+                <p className="hint" style={{ margin: 0 }}>
+                  {slot.hint}
+                  {uploaded ? ` · ${uploaded.row_count} rows from ${uploaded.filename}` : ""}
+                </p>
+              </div>
+              <label className="btn btn-ghost file-btn">
+                {uploaded ? "Replace file" : "Choose file"}
+                <input
+                  type="file"
+                  accept=".csv,.xlsx,.xls"
+                  hidden
+                  disabled={busy}
+                  onChange={async (ev) => {
+                    const file = ev.target.files?.[0];
+                    ev.target.value = "";
+                    if (!file) return;
+                    setBusy(true);
+                    setErr(null);
+                    try {
+                      const id = await ensureBatch();
+                      const uploadedFile = await api.uploadFile(id, slot.id, file);
+                      if (uploadedFile.missing.length === 0) {
+                        await api.mapFile(id, uploadedFile.id, uploadedFile.mapping, dateFormat);
+                      }
+                      setFiles((prev) => [
+                        ...prev.filter((f) => f.entity !== uploadedFile.entity),
+                        uploadedFile,
+                      ]);
+                      setMsg(`${file.name} loaded.`);
+                    } catch (ex) {
+                      setErr(ex instanceof Error ? ex.message : "Upload failed");
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                />
+              </label>
+            </div>
+            {uploaded && uploaded.missing.length > 0 && (
+              <p className="err">This file still needs: {uploaded.missing.join(", ")}</p>
+            )}
+            {uploaded && (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Column in your file</th>
+                    <th>Means</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {uploaded.headers.map((h) => (
+                    <tr key={h}>
+                      <td>{h}</td>
+                      <td>
+                        <select
+                          className="field"
+                          value={uploaded.mapping[h] ?? ""}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setFiles((prev) =>
+                              prev.map((row) =>
+                                row.id === uploaded.id
+                                  ? { ...row, mapping: { ...row.mapping, [h]: value } }
+                                  : row,
+                              ),
+                            );
+                          }}
+                        >
+                          {!FIELD_OPTIONS.some((o) => o.id === (uploaded.mapping[h] ?? "")) && (
+                            <option value={uploaded.mapping[h]}>{uploaded.mapping[h]}</option>
+                          )}
+                          {FIELD_OPTIONS.map((o) => (
+                            <option key={o.id || "none"} value={o.id}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </section>
+        );
+      })}
 
       <section className="panel">
-        <h2>2. Commit and run</h2>
-        <div className="btn-row">
-          <button
-            className="btn btn-ghost"
-            disabled={!batchId || busy}
-            onClick={async () => {
-              if (!batchId) return;
-              setBusy(true);
-              setErr(null);
-              try {
-                const res = await api.commitImport(batchId);
-                setMsg(res.ok ? `Loaded ${JSON.stringify(res.counts)}` : "Commit failed — see errors.");
-                if (!res.ok) setErr("Validation failed on commit.");
-              } catch (ex) {
-                setErr(ex instanceof Error ? ex.message : "Commit failed");
-              } finally {
-                setBusy(false);
+        <h2>Find issues</h2>
+        <p className="hint" style={{ marginTop: 0 }}>
+          Loads the three lists, then runs the payment rules. You will land on Findings.
+        </p>
+        {err && <p className="err">{err}</p>}
+        {msg && <p className="ok-msg">{msg}</p>}
+        <button
+          className="btn"
+          disabled={!ready || busy}
+          onClick={async () => {
+            if (!batchId) return;
+            setBusy(true);
+            setErr(null);
+            try {
+              for (const f of files) {
+                const mapping = Object.fromEntries(
+                  Object.entries(f.mapping).filter(([, value]) => Boolean(value)),
+                );
+                const mapped = await api.mapFile(batchId, f.id, mapping, dateFormat);
+                if (!mapped.ok) {
+                  setErr(`${f.filename} has ${mapped.errors.length} problem(s). Fix the mapping.`);
+                  return;
+                }
               }
-            }}
-          >
-            Commit import
-          </button>
-          <button
-            className="btn"
-            disabled={!batchId || busy}
-            onClick={async () => {
-              if (!batchId) return;
-              setBusy(true);
-              setErr(null);
-              try {
-                const run = await api.run(batchId);
-                setMsg(`Run ${run.id} ${run.status}`);
-                onRan(run.id);
-              } catch (ex) {
-                setErr(ex instanceof Error ? ex.message : "Run failed");
-              } finally {
-                setBusy(false);
+              const res = await api.commitImport(batchId);
+              if (!res.ok) {
+                setErr("The files loaded, but some rows failed checks. Fix dates or amounts and try again.");
+                return;
               }
-            }}
-          >
-            Run rules
-          </button>
-        </div>
+              const run = await api.run(batchId);
+              onRan(run.id);
+            } catch (ex) {
+              setErr(ex instanceof Error ? ex.message : "Could not run");
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          {busy ? "Working…" : ready ? "Find issues" : "Add vendors, invoices and payments first"}
+        </button>
       </section>
     </div>
   );
