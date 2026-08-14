@@ -46,6 +46,10 @@ POST /imports
 POST /imports/{id}/files     entity=payment + the CSV
 PUT  /imports/{id}/files/{fid}/map
 POST /imports/{id}/commit
+POST /runs                       {batch_id}
+POST /exceptions/{id}/transition
+POST /reports/evidence-pack      {run_id}  → ZIP (PDF + CSVs)
+GET  /reports/{id}/download
 ```
 
 If dates look like `03/07/2026`, the API will refuse to guess. Send `date_format: "dmy"` (India) or `"mdy"`.

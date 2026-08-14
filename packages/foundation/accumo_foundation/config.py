@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     retention_months: int = 24
     log_customer_payloads: bool = False
     upload_dir: str = ".data/uploads"
+    report_dir: str = ".data/reports"
 
     @property
     def cookie_secure(self) -> bool:
