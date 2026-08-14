@@ -39,6 +39,17 @@ python -m pytest
 python -m tests.synthetic.generate --rows 5000 --country IN --out .data/in
 ```
 
+Import a file (after sign-in, with Postgres up):
+
+```
+POST /imports
+POST /imports/{id}/files     entity=payment + the CSV
+PUT  /imports/{id}/files/{fid}/map
+POST /imports/{id}/commit
+```
+
+If dates look like `03/07/2026`, the API will refuse to guess. Send `date_format: "dmy"` (India) or `"mdy"`.
+
 API (after Postgres is up):
 
 ```powershell

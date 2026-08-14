@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     login_window_seconds: int = 300
     retention_months: int = 24
     log_customer_payloads: bool = False
+    upload_dir: str = ".data/uploads"
 
     @property
     def cookie_secure(self) -> bool:
