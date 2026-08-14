@@ -35,10 +35,10 @@ export function App() {
         </div>
         <nav className="tabs">
           <button className={tab === "import" ? "on" : ""} onClick={() => setTab("import")}>
-            Import
+            1. Load books
           </button>
           <button className={tab === "findings" ? "on" : ""} onClick={() => setTab("findings")}>
-            Findings
+            2. Findings
           </button>
         </nav>
         <div className="btn-row">
@@ -93,7 +93,7 @@ function Login({ onIn, apiDown }: { onIn: (m: Me) => void; apiDown: boolean }) {
         }}
       >
         <div className="mark">Pulse</div>
-        <p className="lead">Review payments. The number on this screen is money.</p>
+        <p className="lead">Load the books. Decide what is real. Download a pack a partner can attach.</p>
         {apiDown && (
           <p className="err">
             The API is not reachable. Start Postgres + the API, then refresh. This screen is not

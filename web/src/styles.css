@@ -121,8 +121,20 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.03em; }
 }
 .money .k { color: var(--muted); font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
 .money .v { font-size: 1.25rem; font-weight: 700; letter-spacing: -0.03em; margin-top: 0.15rem; }
+.money .s { color: var(--muted); font-size: 0.78rem; margin: 0.35rem 0 0; }
 .money article.confirmed .v { color: var(--accent); }
 .money article.recovered .v { color: var(--ok); }
+.ok-msg { color: var(--ok); font-size: 0.9rem; margin-top: 0.6rem; }
+.toolbar { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; align-items: flex-start; }
+.slot-head { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
+.slot-head h2 { margin-bottom: 0.2rem; }
+.file-btn { cursor: pointer; }
+.inline { display: flex; flex-direction: column; gap: 0.35rem; max-width: 280px; font-size: 0.8rem; font-weight: 600; }
+.facts { margin: 0.75rem 0 0; }
+.facts > div { display: grid; grid-template-columns: 8rem 1fr; gap: 0.35rem; padding: 0.25rem 0; border-bottom: 1px solid var(--line); font-size: 0.88rem; }
+.facts dt { color: var(--muted); text-transform: capitalize; }
+.facts dd { margin: 0; }
+.decide label { display: block; font-size: 0.8rem; font-weight: 600; margin-top: 0.7rem; }
 
 .main { padding: 1rem 1.25rem 2.5rem; flex: 1; }
 .panel {

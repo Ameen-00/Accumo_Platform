@@ -7,6 +7,19 @@ function money(currency: string, amount: string) {
   return `${currency} ${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+const STATUS: Record<string, string> = {
+  new: "New",
+  in_review: "In review",
+  confirmed: "Confirmed",
+  recovered: "Recovered",
+  dismissed: "Dismissed",
+};
+
+function facts(explanation?: Record<string, unknown>) {
+  if (!explanation) return [];
+  return Object.entries(explanation).filter(([k]) => k !== "why" && k !== "rule");
+}
+
 export function Findings({ runId }: { runId: string | null }) {
   const [bar, setBar] = useState<MoneyBar>({ identified: "0", confirmed: "0", recovered: "0" });
   const [rows, setRows] = useState<ExceptionRow[]>([]);
@@ -31,6 +44,7 @@ export function Findings({ runId }: { runId: string | null }) {
   }, [load]);
 
   const current = rows[sel];
+  const ccy = current?.currency || open?.currency || "INR";
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -50,11 +64,12 @@ export function Findings({ runId }: { runId: string | null }) {
   }
 
   async function move(to: string) {
-    if (!current) return;
+    const id = open?.id || current?.id;
+    if (!id) return;
     setBusy(true);
     setErr(null);
     try {
-      await api.transition(current.id, {
+      await api.transition(id, {
         to_status: to,
         reason: reason || undefined,
         recovered_amount: to === "recovered" ? recovered : undefined,
@@ -64,7 +79,7 @@ export function Findings({ runId }: { runId: string | null }) {
       setOpen(null);
       await load();
     } catch (ex) {
-      setErr(ex instanceof Error ? ex.message : "Transition failed");
+      setErr(ex instanceof Error ? ex.message : "Could not save that decision");
     } finally {
       setBusy(false);
     }
@@ -75,34 +90,39 @@ export function Findings({ runId }: { runId: string | null }) {
       <div className="money">
         <article>
           <div className="k">Identified</div>
-          <div className="v">{money("INR", bar.identified)}</div>
+          <div className="v">{money(ccy, bar.identified)}</div>
+          <p className="s">Flagged. Not yet agreed.</p>
         </article>
         <article className="confirmed">
           <div className="k">Confirmed</div>
-          <div className="v">{money("INR", bar.confirmed)}</div>
+          <div className="v">{money(ccy, bar.confirmed)}</div>
+          <p className="s">You said this is real.</p>
         </article>
         <article className="recovered">
           <div className="k">Recovered</div>
-          <div className="v">{money("INR", bar.recovered)}</div>
+          <div className="v">{money(ccy, bar.recovered)}</div>
+          <p className="s">Money recorded as back.</p>
         </article>
       </div>
 
       <div className="main">
         <section className="panel">
-          <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
-            <h2 style={{ margin: 0 }}>Exceptions</h2>
+          <div className="toolbar">
+            <div>
+              <h2 style={{ margin: 0 }}>Findings</h2>
+              <p className="hint" style={{ margin: "0.25rem 0 0" }}>
+                Click a row. Confirm if it is real. Dismiss only with a reason.
+              </p>
+            </div>
             <div className="btn-row">
               <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-                <option value="">All statuses</option>
+                <option value="">All</option>
                 <option value="new">New</option>
                 <option value="in_review">In review</option>
                 <option value="confirmed">Confirmed</option>
                 <option value="recovered">Recovered</option>
                 <option value="dismissed">Dismissed</option>
               </select>
-              <button className="btn btn-ghost" onClick={() => load()} disabled={busy}>
-                Refresh
-              </button>
               <button
                 className="btn"
                 disabled={!runId || busy}
@@ -113,34 +133,28 @@ export function Findings({ runId }: { runId: string | null }) {
                   try {
                     const pack = await api.makePack(runId);
                     await api.downloadPack(pack.id, pack.filename);
-                    setPackMsg(`Pack ${pack.filename}`);
+                    setPackMsg(`Saved ${pack.filename}`);
                   } catch (ex) {
-                    setErr(ex instanceof Error ? ex.message : "Pack failed");
+                    setErr(ex instanceof Error ? ex.message : "Could not build the pack");
                   } finally {
                     setBusy(false);
                   }
                 }}
               >
-                Download evidence pack
+                Download pack
               </button>
             </div>
           </div>
-          <p className="kbd">
-            <kbd>j</kbd>/<kbd>k</kbd> move · <kbd>Enter</kbd> open · dismiss always needs a reason
-          </p>
           {err && <p className="err">{err}</p>}
-          {packMsg && <p className="hint">{packMsg}</p>}
+          {packMsg && <p className="ok-msg">{packMsg}</p>}
           {!runId && (
-            <p className="hint">
-              Run rules from Import first if you want a pack tied to this session. You can still
-              review any findings already in the tenant.
-            </p>
+            <p className="hint">To attach a pack to this session, run Find issues from Import first.</p>
           )}
 
           <table>
             <thead>
               <tr>
-                <th>Rule</th>
+                <th>What it is</th>
                 <th>Status</th>
                 <th>Finding</th>
                 <th>Amount</th>
@@ -156,9 +170,9 @@ export function Findings({ runId }: { runId: string | null }) {
                     void openRow(row.id);
                   }}
                 >
-                  <td>{row.rule}</td>
+                  <td>{row.rule.replaceAll("_", " ")}</td>
                   <td>
-                    <span className={`pill ${row.status}`}>{row.status}</span>
+                    <span className={`pill ${row.status}`}>{STATUS[row.status] ?? row.status}</span>
                   </td>
                   <td>{row.title}</td>
                   <td className="amt">{money(row.currency, row.amount_at_risk)}</td>
@@ -166,7 +180,7 @@ export function Findings({ runId }: { runId: string | null }) {
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={4}>No exceptions yet. Import a file and run rules.</td>
+                  <td colSpan={4}>Nothing here yet. Load books on Import, then Find issues.</td>
                 </tr>
               )}
             </tbody>
@@ -177,26 +191,45 @@ export function Findings({ runId }: { runId: string | null }) {
           <section className="panel detail">
             <div>
               <h2>{open.title}</h2>
-              <p className="why">
-                {String(open.explanation?.why ?? "See comparison below.")}
-              </p>
-              <pre className="hint" style={{ whiteSpace: "pre-wrap" }}>
-                {JSON.stringify(open.explanation, null, 2)}
-              </pre>
+              <p className="why">{String(open.explanation?.why ?? "Open the row details below.")}</p>
+              {facts(open.explanation).length > 0 && (
+                <dl className="facts">
+                  {facts(open.explanation).map(([k, v]) => (
+                    <div key={k}>
+                      <dt>{k.replaceAll("_", " ")}</dt>
+                      <dd>{Array.isArray(v) ? v.join(", ") : String(v)}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
             </div>
-            <div>
+            <div className="decide">
               <p>
-                <span className={`pill ${open.status}`}>{open.status}</span> ·{" "}
-                {money(open.currency, open.amount_at_risk)}
+                <span className={`pill ${open.status}`}>{STATUS[open.status] ?? open.status}</span>{" "}
+                <strong>{money(open.currency, open.amount_at_risk)}</strong>
               </p>
-              <label>
-                Reason (required to dismiss)
-                <textarea className="field" value={reason} onChange={(e) => setReason(e.target.value)} />
-              </label>
-              <label>
-                Recovered amount
-                <input className="field" value={recovered} onChange={(e) => setRecovered(e.target.value)} />
-              </label>
+              {(open.status === "new" || open.status === "in_review") && (
+                <label>
+                  Why dismiss? (required if you dismiss)
+                  <textarea
+                    className="field"
+                    placeholder="e.g. instalment, same payment listed twice, known advance"
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                  />
+                </label>
+              )}
+              {open.status === "confirmed" && (
+                <label>
+                  How much came back
+                  <input
+                    className="field"
+                    placeholder="e.g. 120000"
+                    value={recovered}
+                    onChange={(e) => setRecovered(e.target.value)}
+                  />
+                </label>
+              )}
               <div className="btn-row" style={{ marginTop: "0.75rem" }}>
                 {open.status === "new" && (
                   <button className="btn btn-ghost" disabled={busy} onClick={() => move("in_review")}>
@@ -205,12 +238,12 @@ export function Findings({ runId }: { runId: string | null }) {
                 )}
                 {open.status === "in_review" && (
                   <button className="btn btn-ok" disabled={busy} onClick={() => move("confirmed")}>
-                    Confirm
+                    This is real
                   </button>
                 )}
                 {(open.status === "new" || open.status === "in_review") && (
                   <button className="btn btn-danger" disabled={busy} onClick={() => move("dismissed")}>
-                    Dismiss
+                    Not a finding
                   </button>
                 )}
                 {open.status === "confirmed" && (
