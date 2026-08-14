@@ -48,16 +48,12 @@ uvicorn app.main:app --reload --app-dir apps/api
 
 ## Workflow
 
-One branch per spec section. Independently testable.
-
 ```
-git checkout -b feat/schema
-git checkout -b feat/csv-importer
-git checkout -b feat/identity-resolution
-git checkout -b feat/rule-dup-exact
+feat/<section>  ──PR──►  staging  ──PR──►  main
+                     TEST              PRODUCTION
 ```
 
-Work, commit, push, PR, merge. Do not commit on `main`.
+Never commit on `staging` or `main`. Full loop is in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## India then Dubai
 
