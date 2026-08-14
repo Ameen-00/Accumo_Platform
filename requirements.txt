@@ -1,0 +1,15 @@
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
+sqlalchemy==2.0.40
+psycopg[binary]==3.2.6
+alembic==1.15.2
+pydantic-settings==2.8.1
+argon2-cffi==23.1.0
+itsdangerous==2.2.1
+cryptography==44.0.2
+python-multipart==0.0.20
+polars==1.27.1
+rapidfuzz==3.13.0
+httpx==0.28.1
+pytest==8.3.5
+email-validator==2.2.0
