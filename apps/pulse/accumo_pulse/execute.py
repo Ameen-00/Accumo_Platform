@@ -15,6 +15,7 @@ from accumo_canonical.models import (
     VendorIdentityMember,
 )
 from accumo_pulse.rules.dup_exact import DupExact
+from accumo_pulse.rules.dup_fuzzy import DupFuzzy
 from accumo_rules.context import AllocatedPayment
 from accumo_rules.persist import persist_findings
 
@@ -56,12 +57,18 @@ def load_allocated(db: Session, organisation_id: uuid.UUID, batch_id: uuid.UUID)
 
 
 def run_dup_exact(db: Session, organisation_id: uuid.UUID, batch_id: uuid.UUID):
+    """Kept name so /runs stays stable. Runs exact then fuzzy."""
+    return run_duplicate_rules(db, organisation_id, batch_id)
+
+
+def run_duplicate_rules(db: Session, organisation_id: uuid.UUID, batch_id: uuid.UUID):
     payments = load_allocated(db, organisation_id, batch_id)
-    findings = list(DupExact().run(payments))
     return persist_findings(
         db,
         organisation_id=organisation_id,
         batch_id=batch_id,
-        rule_code=DupExact.code,
-        findings=findings,
+        by_rule={
+            DupExact.code: list(DupExact().run(payments)),
+            DupFuzzy.code: list(DupFuzzy().run(payments)),
+        },
     )
