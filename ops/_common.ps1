@@ -18,9 +18,22 @@ function Get-Pem {
   if (-not (Test-Path $PemSource)) {
     throw "SSH key not found at $PemSource"
   }
+
+  # A previous run (or the manual icacls in the handover) leaves this file with
+  # inheritance stripped and read-only. Copy-Item -Force then cannot overwrite
+  # it and the whole deploy dies here. Take ownership back before replacing.
+  if (Test-Path $dest) {
+    icacls $dest /grant:r "$($env:USERNAME):(F)" 2>&1 | Out-Null
+    Remove-Item $dest -Force -ErrorAction SilentlyContinue
+  }
+
   Copy-Item $PemSource $dest -Force
-  icacls $dest /inheritance:r | Out-Null
-  icacls $dest /grant:r "$($env:USERNAME):(R)" | Out-Null
+
+  # ssh refuses a key that other accounts can read. Removing inheritance drops
+  # every inherited ACE; the grant then makes this user the only one on it.
+  # Full rather than read, so the next run can overwrite it.
+  icacls $dest /inheritance:r 2>&1 | Out-Null
+  icacls $dest /grant:r "$($env:USERNAME):(F)" 2>&1 | Out-Null
   return $dest
 }
 
