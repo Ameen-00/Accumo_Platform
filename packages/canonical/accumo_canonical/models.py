@@ -372,3 +372,58 @@ class Job(Base):
 
 # Silence unused import warning for relationship if unused
 _ = relationship
+
+
+class SupplierPattern(Base):
+    """What Pulse has learned about one supplier, so it never asks twice.
+
+    The product rule this table enforces: every question Pulse asks must retire
+    a class of future questions. v1 asked about each transaction, which is the
+    clerical reconciliation Zoho already does for free. Here a human teaches a
+    pattern once -- "ABC Traders is paid net of 2% TDS, narration ABCTRD, from
+    the HDFC current account" -- and it applies to every transaction that fits,
+    past and future.
+
+    `asked_at` is the enforcement. Once set, the code must never raise the same
+    (identity, kind) question again, whether or not it got a useful answer.
+    Asking twice is a defect, not a follow-up.
+
+    Note on TDS: the rate follows the *nature of the work*, not the supplier.
+    The same supplier can invoice contract work at one section and professional
+    fees at another. So a `tds` pattern is keyed by nature inside `value`, and
+    is a prior to check rather than a rate to apply blindly.
+    """
+
+    __tablename__ = "supplier_pattern"
+    __table_args__ = (
+        UniqueConstraint("organisation_id", "identity_id", "kind"),
+        Index("ix_pattern_org_identity", "organisation_id", "identity_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organisation.id"), nullable=False
+    )
+    identity_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("vendor_identity.id"), nullable=False
+    )
+
+    # narration | bank_account | tds | terms | cadence | clubbing | credit_adjust
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    value: Mapped[dict] = mapped_column(JSONB, nullable=False)
+
+    # observed = Pulse worked it out from the data.
+    # taught   = a human answered once. Taught beats observed on conflict.
+    source: Mapped[str] = mapped_column(Text, nullable=False, default="observed")
+    taught_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("app_user.id"))
+
+    confidence: Mapped[Decimal] = mapped_column(Conf, nullable=False, default=Decimal("0.500"))
+    observations: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # Set the moment a human is asked. Never ask this (identity, kind) again.
+    asked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
