@@ -210,3 +210,44 @@ def test_unconfirmed_rows_do_not_appear_in_findings_csv():
     csv_text = ZipFile(BytesIO(render_zip(pack))).read("findings.csv").decode("utf-8")
     assert "attach this" in csv_text
     assert "queue only" not in csv_text
+
+
+def test_completeness_findings_never_inflate_the_money_figures():
+    """Regression: the pack once told the first real user INR 5.27 crore was
+    confirmed when the money that had gone wrong was INR 9.4 lakh.
+
+    An unmatched bank summary carries the whole outflow it could not explain,
+    and an open-invoice summary carries the whole receivable. Both are coverage
+    questions. Adding them to duplicate payments produced a number that scaled
+    with the size of the ledger rather than with anything being wrong.
+    """
+    pack = build_pack(
+        _src(
+            exceptions=[
+                # Real money: a duplicate and an unclaimed credit.
+                _exc(rule_code="DUP_DOC", status="confirmed", amount="778218"),
+                _exc(rule_code="CREDIT_UNAPPLIED", status="confirmed", amount="162285"),
+                # Coverage questions. Large, and not losses.
+                _exc(rule_code="OPEN_BANK", status="confirmed", amount="34591856"),
+                _exc(rule_code="OPEN_INVOICE", status="confirmed", amount="16695337"),
+                _exc(rule_code="COMP_2B_ORPHAN", status="confirmed", amount="519343"),
+                _exc(rule_code="MATCH_SUGGEST", status="new", amount="4347848"),
+            ]
+        )
+    )
+
+    assert pack.confirmed == Decimal("940503")
+    assert pack.identified == Decimal("940503")
+
+    # Still counted, still shown, just never added to the money.
+    assert pack.unexplained_count == 4
+    assert pack.unexplained_amount == Decimal("56154384")
+
+    # Everything a person agreed with stays in section 2, both families.
+    assert len(pack.findings) == 5
+
+    html = render_html(pack)
+    assert "940,503" in html
+    assert "not money at risk" in html.lower()
+    # The conflated total must not appear anywhere in the document.
+    assert "52,747,039" not in html

@@ -21,6 +21,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from accumo_pulse.catalogue import RULES
+from accumo_rules.desk import INTEGRITY
 
 CATALOGUE = tuple(code for code, *_ in RULES)
 CONFIRMED_STATUSES = frozenset({"confirmed", "recovered"})
@@ -113,6 +114,8 @@ class EvidencePack:
     run_id: UUID
     generated_at: datetime
     generated_by: str
+    # Money only. INTEGRITY rules — a payment that should not have gone out,
+    # or a credit never taken. These are the figures a person can chase.
     identified: Decimal
     confirmed: Decimal
     recovered: Decimal
@@ -124,6 +127,12 @@ class EvidencePack:
     dispositions: list[DispositionView]
     limitations: list[str] = field(default_factory=list)
     spoken: str = ""
+    # Completeness and match questions — bank lines with no bill, 2B entries we
+    # never captured, amounts awaiting a human link. Real questions, but NOT
+    # money at risk: a ledger with a large turnover produces large unexplained
+    # totals simply by existing. Counted here, never added to the figures above.
+    unexplained_count: int = 0
+    unexplained_amount: Decimal = Decimal("0")
 
     @property
     def headline(self) -> str:
@@ -132,6 +141,16 @@ class EvidencePack:
             f"{money(ccy, self.identified)} identified · "
             f"{money(ccy, self.confirmed)} confirmed · "
             f"{money(ccy, self.recovered)} recovered"
+        )
+
+    @property
+    def unexplained_line(self) -> str:
+        if not self.unexplained_count:
+            return ""
+        return (
+            f"{self.unexplained_count} item(s) this drop cannot explain, "
+            f"covering {money(self.currency, self.unexplained_amount)} of activity. "
+            f"That is not money at risk."
         )
 
 
@@ -200,9 +219,27 @@ def build_pack(src: PackInput) -> EvidencePack:
         (e.recovered_amount or Decimal("0") for e in src.events if e.to_status == "recovered"),
         start=Decimal("0"),
     )
-    identified = sum((x.amount for x in src.exceptions), start=Decimal("0"))
-    confirmed_rows = [x for x in src.exceptions if x.status in CONFIRMED_STATUSES]
+    # Money figures come from INTEGRITY rules only.
+    #
+    # Summing every rule into one total produced a pack that told the first real
+    # user INR 5.27 crore was confirmed, when the money that had actually gone
+    # wrong was INR 9.4 lakh. The rest was one unmatched bank summary and one
+    # open-invoice summary — questions about coverage, not losses. A reviewer
+    # shown that number either disbelieves the whole pack or repeats it to a
+    # client. Both are worse than showing nothing.
+    money_rows = [x for x in src.exceptions if x.rule_code in INTEGRITY]
+    other_rows = [x for x in src.exceptions if x.rule_code not in INTEGRITY]
+
+    identified = sum((x.amount for x in money_rows), start=Decimal("0"))
+    confirmed_rows = [x for x in money_rows if x.status in CONFIRMED_STATUSES]
     confirmed = sum((x.amount for x in confirmed_rows), start=Decimal("0"))
+
+    unexplained_count = len(other_rows)
+    unexplained_amount = sum((x.amount for x in other_rows), start=Decimal("0"))
+
+    # Section 2 still lists everything a person agreed with, including the
+    # completeness ones. Splitting the money must not hide his review work.
+    all_confirmed = [x for x in src.exceptions if x.status in CONFIRMED_STATUSES]
 
     applied_codes = [r.code for r in src.rules]
     codes = list(dict.fromkeys(applied_codes + [x.rule_code for x in src.exceptions]))
@@ -256,7 +293,7 @@ def build_pack(src: PackInput) -> EvidencePack:
         row_counts=dict(src.row_counts or {}),
         rules=list(src.rules),
         by_rule=by_rule,
-        findings=sorted(confirmed_rows, key=lambda x: x.amount, reverse=True),
+        findings=sorted(all_confirmed, key=lambda x: x.amount, reverse=True),
         dispositions=list(src.events),
         limitations=unseen_for(src.files)
         + limitations_for(
@@ -266,6 +303,8 @@ def build_pack(src: PackInput) -> EvidencePack:
             has_change_log=src.has_change_log,
         ),
         spoken=spoken_line(drop_stats),
+        unexplained_count=unexplained_count,
+        unexplained_amount=unexplained_amount,
     )
     if not pack.limitations:
         raise RuntimeError("evidence pack refused: limitations section is empty")
@@ -387,7 +426,7 @@ def render_html(pack: EvidencePack) -> str:
       <div class="card">
         <div class="k">Identified</div>
         <div class="v">{esc(money(pack.currency, pack.identified))}</div>
-        <div class="s">Flagged by the rules. Not yet agreed.</div>
+        <div class="s">Money the rules flagged. Not yet agreed.</div>
       </div>
       <div class="card">
         <div class="k">Confirmed</div>
@@ -401,6 +440,7 @@ def render_html(pack: EvidencePack) -> str:
       </div>
     </div>
     <p class="spoken">{esc(pack.spoken or pack.headline)}</p>
+    {f'<p class="lede"><strong>Separately:</strong> {esc(pack.unexplained_line)} These are coverage questions — a bank line with no bill in this drop, or a 2B entry not captured. They are counted on their own and deliberately kept out of the figures above.</p>' if pack.unexplained_count else ''}
 
     <h2>2. What you confirmed</h2>
     {''.join(findings)}
