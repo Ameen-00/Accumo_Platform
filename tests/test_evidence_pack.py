@@ -251,3 +251,42 @@ def test_completeness_findings_never_inflate_the_money_figures():
     assert "not money at risk" in html.lower()
     # The conflated total must not appear anywhere in the document.
     assert "52,747,039" not in html
+
+    # Correct totals are not enough. Sorting every confirmed row by amount put
+    # the 3.4 crore unmatched-bank summary first, so a pack headlined 9.4 lakh
+    # still read as crores to anyone skimming. Money group must come first, in
+    # both renderings -- the PDF especially, since that is what gets downloaded.
+    for doc in (html, render_pdf(pack).decode("latin-1", "ignore")):
+        money_hdr = doc.index("Money that may have wrongly left")
+        cover_hdr = doc.index("Coverage questions")
+        assert money_hdr < cover_hdr
+        assert money_hdr < doc.index("34,591,856")
+
+
+def test_pdf_does_not_render_question_marks_for_real_characters():
+    """A pack shipped to the first user read '(January 2026?April 2026)' and
+    '2 bank files ? cash was not tested'. The PDF writer encoded latin-1 with
+    "replace", so every arrow and dash became a question mark. A document that
+    looks broken gets read as though its numbers are broken."""
+    from accumo_pulse.pack import _pdf_escape
+
+    assert _pdf_escape("January 2026–April 2026") == "January 2026-April 2026"
+    assert _pdf_escape("2 bank files → cash not tested") == "2 bank files -> cash not tested"
+    assert _pdf_escape("a — b") == "a - b"
+    assert "?" not in _pdf_escape("“quoted” ‘words’ … ₹100")
+
+    pack = build_pack(
+        _src(
+            exceptions=[
+                _exc(
+                    rule_code="DUP_DOC",
+                    status="confirmed",
+                    amount="778218",
+                    title="39 bills from months outside this bank file (January 2026–April 2026)",
+                )
+            ]
+        )
+    )
+    body = render_pdf(pack).decode("latin-1", "ignore")
+    assert "2026-April" in body
+    assert "2026?April" not in body

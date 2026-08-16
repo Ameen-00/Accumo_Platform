@@ -351,13 +351,8 @@ def render_html(pack: EvidencePack) -> str:
         f"<td>{s.recovered_count}<br><span class='amt'>{esc(money(pack.currency, s.recovered_amount))}</span></td></tr>"
         for s in pack.by_rule
     ) or "<tr><td colspan='4'>No exceptions in this run.</td></tr>"
-    findings = []
-    if not pack.findings:
-        findings.append(
-            "<p>No exceptions were confirmed in this run. Identified items remain in the review queue.</p>"
-        )
-    for item in pack.findings:
-        findings.append(
+    def _finding_html(item) -> str:
+        return (
             "<article class='finding'>"
             f"<div class='finding-top'><span class='tag'>{esc(item.rule_code)}</span>"
             f"<span class='tag quiet'>{esc(item.status)}</span>"
@@ -366,6 +361,30 @@ def render_html(pack: EvidencePack) -> str:
             f"<p>{esc(_why(item.explanation))}</p>"
             "</article>"
         )
+
+    # Money first, coverage questions after, each sorted by amount within its
+    # own group. Sorting the whole list by amount put a 3.4 crore unmatched-bank
+    # summary at the top of a pack whose headline was 9.4 lakh -- the totals were
+    # right and the page still read as crores.
+    money_findings = [x for x in pack.findings if x.rule_code in INTEGRITY]
+    other_findings = [x for x in pack.findings if x.rule_code not in INTEGRITY]
+
+    findings = []
+    if not pack.findings:
+        findings.append(
+            "<p>No exceptions were confirmed in this run. Identified items remain in the review queue.</p>"
+        )
+    if money_findings:
+        findings.append("<h3 class='grp'>Money that may have wrongly left</h3>")
+        findings.extend(_finding_html(i) for i in money_findings)
+    if other_findings:
+        findings.append(
+            "<h3 class='grp'>Coverage questions</h3>"
+            "<p class='grp-note'>Confirmed as real questions, not as losses. The amounts below "
+            "are the size of the activity Pulse could not match, so they scale with the ledger. "
+            "They are deliberately excluded from the figures at the top of this pack.</p>"
+        )
+        findings.extend(_finding_html(i) for i in other_findings)
     disp = "".join(
         f"<tr><td>{esc(d.at.strftime('%d %b %Y %H:%M') if d.at else '')}</td>"
         f"<td>{esc(d.actor)}</td><td>{esc(d.rule_code)}</td>"
@@ -412,6 +431,8 @@ def render_html(pack: EvidencePack) -> str:
     .finding-top {{ display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }}
     .tag {{ background: #E7EBF6; color: var(--navy); font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }}
     .tag.quiet {{ background: #EEE; color: var(--muted); }}
+    .grp {{ margin: 22px 0 4px; font-size: 15px; color: var(--navy); border-bottom: 2px solid #E7EBF6; padding-bottom: 4px; }}
+    .grp-note {{ margin: 0 0 10px; font-size: 12px; color: var(--muted); }}
     @media print {{ body {{ background: #fff; }} .wrap {{ padding: 0; }} }}
   </style>
 </head>
@@ -486,8 +507,33 @@ def render_html(pack: EvidencePack) -> str:
 """
 
 
+# The PDF writer emits latin-1. Encoding with "replace" turned every character
+# outside that set into a literal question mark, so a real pack read
+# "39 bills are from months outside this bank file (January 2026?April 2026)"
+# and "2 bank files ? cash was not tested". Readers see a broken document and
+# reasonably assume the numbers are broken too.
+#
+# Substitute deliberately instead of letting the codec guess.
+_PDF_SUBS = {
+    "→": "->", "←": "<-",
+    # No padding: an em-dash in prose is already surrounded by spaces, and
+    # adding more produces "a  -  b".
+    "—": "-", "–": "-", "−": "-",
+    "‘": "'", "’": "'", "‚": ",",
+    "“": '"', "”": '"',
+    "…": "...", "•": "-", "·": "-",
+    "₹": "INR ", " ": " ",
+    "≤": "<=", "≥": ">=", "≠": "!=",
+    "✓": "yes", "✗": "no",
+}
+_PDF_TABLE = str.maketrans(_PDF_SUBS)
+
+
 def _pdf_escape(text: str) -> str:
-    safe = text.encode("latin-1", "replace").decode("latin-1")
+    safe = str(text).translate(_PDF_TABLE)
+    # Anything still outside latin-1 is dropped rather than shown as "?".
+    # A missing glyph is quieter than a wrong one.
+    safe = safe.encode("latin-1", "ignore").decode("latin-1")
     return safe.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
 
@@ -613,7 +659,8 @@ def render_pdf(pack: EvidencePack) -> bytes:
     doc.heading("2. What you confirmed", 13)
     if not pack.findings:
         doc.text("No exceptions were confirmed in this run. Identified items remain in the review queue.")
-    for item in pack.findings:
+
+    def _emit(item) -> None:
         doc.gap(4)
         doc.text(item.title, 11)
         doc.text(
@@ -622,6 +669,27 @@ def render_pdf(pack: EvidencePack) -> bytes:
         why = _why(item.explanation)
         if why:
             doc.text(why)
+
+    # Same grouping as the HTML. This is the file people actually download, so
+    # leading it with a 3.4 crore coverage summary undoes the split at the top.
+    money_findings = [x for x in pack.findings if x.rule_code in INTEGRITY]
+    other_findings = [x for x in pack.findings if x.rule_code not in INTEGRITY]
+
+    if money_findings:
+        doc.gap(6)
+        doc.text("Money that may have wrongly left", 12)
+        for item in money_findings:
+            _emit(item)
+    if other_findings:
+        doc.gap(8)
+        doc.text("Coverage questions", 12)
+        doc.text(
+            "Confirmed as real questions, not as losses. These amounts are the size of the "
+            "activity Pulse could not match, so they scale with the ledger. They are excluded "
+            "from the figures at the top of this pack."
+        )
+        for item in other_findings:
+            _emit(item)
 
     doc.gap(8)
     doc.heading("3. Who decided", 13)
