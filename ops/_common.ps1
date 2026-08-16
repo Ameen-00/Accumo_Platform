@@ -6,7 +6,10 @@ $ErrorActionPreference = "Stop"
 $StagingHost = "ubuntu@13.127.41.18"
 $StagingUrl  = "https://staging.pulse.accumo.co"
 $AppDir      = "/opt/pulse"
-$ReleaseDir  = "/opt/pulse-releases"
+# /opt is root-owned, so the ubuntu user cannot create a sibling of /opt/pulse
+# there. Keeping snapshots under the home directory avoids needing sudo, and
+# keeps them outside the app dir so extracting a release cannot clobber them.
+$ReleaseDir  = "/home/ubuntu/pulse-releases"
 $Compose     = "docker compose -f docker/docker-compose.staging.yml"
 $PemSource   = "$env:USERPROFILE\Documents\pulse-staging.pem"
 
