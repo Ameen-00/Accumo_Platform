@@ -4,6 +4,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from accumo_canonical.db import get_db
@@ -48,6 +49,28 @@ def create_run(
         db.rollback()
         raise
     return {"id": str(run.id), "status": run.status, "stats": run.stats}
+
+
+@router.get("/runs/latest")
+def latest_run(
+    db: Session = Depends(get_db),
+    user: AppUser = Depends(current_user),
+):
+    if not user.organisation_id:
+        raise HTTPException(status_code=404, detail="No run yet")
+    run = db.scalar(
+        select(Run)
+        .where(Run.organisation_id == user.organisation_id)
+        .order_by(Run.started_at.desc().nullslast(), Run.id.desc())
+    )
+    if not run:
+        raise HTTPException(status_code=404, detail="No run yet")
+    return {
+        "id": str(run.id),
+        "status": run.status,
+        "stats": run.stats,
+        "rule_versions": run.rule_versions,
+    }
 
 
 @router.get("/runs/{run_id}")

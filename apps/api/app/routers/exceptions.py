@@ -14,7 +14,10 @@ from accumo_canonical.models import Exception as ExceptionRow
 from accumo_canonical.models import ExceptionEvent
 from accumo_foundation.audit import write
 from accumo_foundation.auth import current_user, require_roles
+from accumo_foundation.brain import explain_finding
+from accumo_foundation.guide import next_action
 from accumo_foundation.disposition import TransitionError, assert_transition
+from accumo_rules.desk import COMPLETE, INTEGRITY, MATCH
 
 router = APIRouter(prefix="/exceptions", tags=["exceptions"])
 
@@ -77,12 +80,23 @@ def _money(rows: list[ExceptionRow], status: str | None = None) -> Decimal:
     return sum((r.amount_at_risk for r in picked), start=Decimal("0"))
 
 
+def _family(code: str) -> str:
+    if code in INTEGRITY:
+        return "integrity"
+    if code in MATCH:
+        return "match"
+    if code in COMPLETE:
+        return "completeness"
+    return "integrity"
+
+
 @router.get("")
 def list_exceptions(
     db: Session = Depends(get_db),
     user: AppUser = Depends(current_user),
     status: str | None = None,
     rule: str | None = None,
+    family: str | None = None,
 ):
     stmt = select(ExceptionRow).where(ExceptionRow.organisation_id == user.organisation_id)
     if status:
@@ -90,14 +104,8 @@ def list_exceptions(
     if rule:
         stmt = stmt.where(ExceptionRow.rule_code == rule)
     stmt = stmt.order_by(ExceptionRow.amount_at_risk.desc())
-    rows = list(db.scalars(stmt))
-    all_rows = (
-        rows
-        if not status and not rule
-        else list(
-            db.scalars(select(ExceptionRow).where(ExceptionRow.organisation_id == user.organisation_id))
-        )
-    )
+    all_rows = list(db.scalars(stmt))
+    rows = [r for r in all_rows if _family(r.rule_code) == family] if family else all_rows
     recovered = Decimal("0")
     if all_rows:
         recovered = sum(
@@ -112,12 +120,23 @@ def list_exceptions(
             ),
             start=Decimal("0"),
         )
+    integrity = [r for r in all_rows if _family(r.rule_code) == "integrity"]
+    completeness = [r for r in all_rows if _family(r.rule_code) == "completeness"]
+    match = [r for r in all_rows if _family(r.rule_code) == "match"]
     return {
-        "identified": str(_money(all_rows)),
+        "identified": str(_money(integrity)),
+        "completeness": str(_money(completeness)),
+        "to_confirm": str(_money(match)),
         "confirmed": str(_money(all_rows, "confirmed") + _money(all_rows, "recovered")),
         "recovered": str(recovered),
         "count": len(rows),
-        "exceptions": [_summary(r) for r in rows],
+        "queues": {
+            "integrity": len(integrity),
+            "completeness": len(completeness),
+            "match": len(match),
+            "all": len(all_rows),
+        },
+        "exceptions": [{**_summary(r), "family": _family(r.rule_code)} for r in rows],
     }
 
 
@@ -138,6 +157,14 @@ def get_exception(
     return {
         **_summary(row),
         "explanation": row.explanation,
+        "brain": explain_finding(
+            {
+                "title": row.title,
+                "rule_code": row.rule_code,
+                "amount_at_risk": str(row.amount_at_risk),
+                "explanation": row.explanation,
+            }
+        ),
         "evidence": row.evidence,
         "events": [
             {
@@ -194,4 +221,5 @@ def _summary(row: ExceptionRow) -> dict:
         "currency": row.currency,
         "confidence": str(row.confidence),
         "explanation": row.explanation,
+        "next_action": next_action(row.rule_code, row.explanation if isinstance(row.explanation, dict) else None),
     }

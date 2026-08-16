@@ -9,6 +9,22 @@
 *.xls
 *.dump
 
+# Customer documents. This product ingests invoices, bank statements and
+# ledgers — a single one committed here is a client's data in git history
+# forever, surviving any later deletion.
+*.pdf
+*.zip
+*.eml
+
+# Private keys. pulse-staging.pem must never be inside the repo tree.
+*.pem
+*.ppk
+id_rsa*
+
+# Local smoke and scratch scripts (_smoke_intake.py, _run_arjun_zip.py, ...).
+# They point at real hosts and real customer files.
+_*.py
+
 .data/
 /data/
 /uploads/

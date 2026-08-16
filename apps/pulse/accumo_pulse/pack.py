@@ -90,6 +90,7 @@ class PackInput:
     bank_change_assessable: bool
     has_change_log: bool = False
     catalogue: tuple[str, ...] = CATALOGUE
+    stats: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -122,6 +123,7 @@ class EvidencePack:
     findings: list[ExceptionView]
     dispositions: list[DispositionView]
     limitations: list[str] = field(default_factory=list)
+    spoken: str = ""
 
     @property
     def headline(self) -> str:
@@ -142,8 +144,8 @@ def limitations_for(
 ) -> list[str]:
     """Section 7. Always returns a non-empty list. Always mentions R4."""
     lines = [
-        "This pack lists exceptions raised by the rules that ran. "
-        "It is not an audit opinion and it is not a statement that unlisted payments are clean.",
+        "This pack is the drop you ran, the questions Pulse asked, and what a person confirmed. "
+        "It is not an audit opinion. Unlisted payments are not a clean book.",
     ]
     missing = [code for code in catalogue if code not in applied]
     if missing:
@@ -171,12 +173,25 @@ def limitations_for(
             "Accounts that never appeared in the file were not tested."
         )
     lines.append(
-        "Amounts are as loaded from the source files. They have not been agreed to bank statements."
+        "Amounts are as loaded from the source files. They have not been agreed to a second bank file."
     )
     lines.append(
-        "Identity resolution may have merged or split suppliers. "
-        "Review the pending-identity queue before treating vendor names as final."
+        "Supplier names may have been merged. Check pending identities before treating a name as final."
     )
+    return lines
+
+
+def unseen_for(files: list[SourceFileInfo]) -> list[str]:
+    names = " ".join((f.filename or "").lower() for f in files)
+    lines: list[str] = []
+    if "whatsapp" not in names:
+        lines.append("No WhatsApp export was in this drop. Photos sitting on a phone were not tested.")
+    if "cash" not in names and "petty" not in names:
+        lines.append("No cash book. Cash paid with no voucher was not tested.")
+    if "gstr" not in names and "2b" not in names:
+        lines.append("No GSTR-2B file in this drop — GST portal completeness was not tested.")
+    if "acct_statement" not in names and "bank" not in names and "statement" not in names:
+        lines.append("No bank statement in this drop — paid-without-a-bill was not tested.")
     return lines
 
 
@@ -216,8 +231,16 @@ def build_pack(src: PackInput) -> EvidencePack:
             )
         )
 
+    from accumo_foundation.guide import spoken_line
+
     start = src.period_start.isoformat() if src.period_start else "unspecified"
     end = src.period_end.isoformat() if src.period_end else "unspecified"
+    drop_stats = dict(src.stats or {})
+    if not drop_stats and src.row_counts:
+        drop_stats = {
+            "invoices": src.row_counts.get("invoice") or src.row_counts.get("invoices") or 0,
+            "payments": src.row_counts.get("payment") or src.row_counts.get("payments") or 0,
+        }
     pack = EvidencePack(
         organisation_name=src.organisation_name,
         country_code=src.country_code,
@@ -235,12 +258,14 @@ def build_pack(src: PackInput) -> EvidencePack:
         by_rule=by_rule,
         findings=sorted(confirmed_rows, key=lambda x: x.amount, reverse=True),
         dispositions=list(src.events),
-        limitations=limitations_for(
+        limitations=unseen_for(src.files)
+        + limitations_for(
             bank_change_assessable=src.bank_change_assessable,
             applied=applied_codes,
             catalogue=src.catalogue,
             has_change_log=src.has_change_log,
         ),
+        spoken=spoken_line(drop_stats),
     )
     if not pack.limitations:
         raise RuntimeError("evidence pack refused: limitations section is empty")
@@ -340,6 +365,7 @@ def render_html(pack: EvidencePack) -> str:
     table {{ border-collapse: collapse; width: 100%; margin: 8px 0 16px; font-size: 13px; }}
     th, td {{ border-bottom: 1px solid var(--line); padding: 8px 6px; text-align: left; vertical-align: top; }}
     th {{ color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }}
+    .spoken {{ font-size: 17px; font-weight: 700; margin: 16px 0 8px; letter-spacing: -0.02em; }}
     .limits {{ background: var(--warn); border: 1px solid var(--warn-line); padding: 14px 18px; border-radius: 10px; }}
     .limits ul {{ margin: 8px 0 0; padding-left: 18px; }}
     .finding {{ border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 0 0 12px; }}
@@ -374,8 +400,18 @@ def render_html(pack: EvidencePack) -> str:
         <div class="s">Money recorded as back.</div>
       </div>
     </div>
+    <p class="spoken">{esc(pack.spoken or pack.headline)}</p>
 
-    <h2>2. Scope — what we looked at</h2>
+    <h2>2. What you confirmed</h2>
+    {''.join(findings)}
+
+    <h2>3. Who decided what</h2>
+    <table>
+      <tr><th>When</th><th>Who</th><th>Rule</th><th>Decision</th><th>Reason</th><th>Recovered</th></tr>
+      {disp}
+    </table>
+
+    <h2>4. Scope — what we looked at</h2>
     <p class="muted">Files as received. The hash is so you can prove it was this file, not another.</p>
     <table>
       <tr><th>List</th><th>File</th><th>Rows</th><th>SHA-256</th></tr>
@@ -386,26 +422,17 @@ def render_html(pack: EvidencePack) -> str:
       {counts}
     </table>
 
-    <h2>3. Rules applied</h2>
-    <p class="muted">Only these tests ran. A missing rule is not a clean result — see limitations.</p>
+    <h2>5. Rules applied</h2>
+    <p class="muted">Only these tests ran. A missing rule is not a clean result — see what we did not see.</p>
     <table>
       <tr><th>What it looks for</th><th>Code</th><th>Version</th><th>Settings</th></tr>
       {rules}
     </table>
 
-    <h2>4. Summary</h2>
+    <h2>6. Summary</h2>
     <table>
       <tr><th>Rule</th><th>Identified</th><th>Confirmed</th><th>Recovered</th></tr>
       {summary}
-    </table>
-
-    <h2>5. Findings (confirmed)</h2>
-    {''.join(findings)}
-
-    <h2>6. Dispositions — who decided what</h2>
-    <table>
-      <tr><th>When</th><th>Who</th><th>Rule</th><th>Decision</th><th>Reason</th><th>Recovered</th></tr>
-      {disp}
     </table>
 
     <h2>7. Limitations — what this pack could not test</h2>
@@ -538,11 +565,38 @@ def render_pdf(pack: EvidencePack) -> bytes:
     doc.text(pack.headline, 12)
     doc.gap(4)
     doc.text("Identified = flagged. Confirmed = a reviewer agreed. Recovered = money back.")
+    doc.text(pack.spoken or "")
     doc.text(f"Period {pack.period_label}")
     doc.text(f"Generated {pack.generated_at.isoformat()} by {pack.generated_by}")
 
     doc.gap(10)
-    doc.heading("2. Scope", 13)
+    doc.heading("2. What you confirmed", 13)
+    if not pack.findings:
+        doc.text("No exceptions were confirmed in this run. Identified items remain in the review queue.")
+    for item in pack.findings:
+        doc.gap(4)
+        doc.text(item.title, 11)
+        doc.text(
+            f"{item.rule_code} · {item.status} · {money(item.currency, item.amount)}"
+        )
+        why = _why(item.explanation)
+        if why:
+            doc.text(why)
+
+    doc.gap(8)
+    doc.heading("3. Who decided", 13)
+    if not pack.dispositions:
+        doc.text("No dispositions recorded.")
+    for event in pack.dispositions:
+        when = event.at.isoformat() if event.at else ""
+        rec = money(pack.currency, event.recovered_amount) if event.recovered_amount is not None else ""
+        doc.text(
+            f"{when}  {event.actor}  {event.rule_code}  "
+            f"{event.from_status or '—'} -> {event.to_status}  {event.reason or ''}  {rec}"
+        )
+
+    doc.gap(10)
+    doc.heading("4. Scope", 13)
     doc.text("What was loaded for this run. Hashes are SHA-256 of the files as received.")
     if not pack.files:
         doc.text("No source files recorded.")
@@ -554,14 +608,14 @@ def render_pdf(pack: EvidencePack) -> bytes:
         doc.text(f"loaded {key}: {value}")
 
     doc.gap(8)
-    doc.heading("3. Rules applied", 13)
+    doc.heading("5. Rules applied", 13)
     if not pack.rules:
         doc.text("No rules recorded on this run.")
     for rule in pack.rules:
         doc.text(f"{rule.code}  v{rule.version}  {rule.name}  params={rule.params}")
 
     doc.gap(8)
-    doc.heading("4. Summary", 13)
+    doc.heading("6. Summary", 13)
     doc.text("identified / confirmed / recovered, by rule")
     if not pack.by_rule:
         doc.text("No exceptions in this run.")
@@ -570,32 +624,6 @@ def render_pdf(pack: EvidencePack) -> bytes:
             f"{row.code}: identified {row.identified_count} {money(pack.currency, row.identified_amount)}; "
             f"confirmed {row.confirmed_count} {money(pack.currency, row.confirmed_amount)}; "
             f"recovered {row.recovered_count} {money(pack.currency, row.recovered_amount)}"
-        )
-
-    doc.gap(8)
-    doc.heading("5. Findings (confirmed)", 13)
-    if not pack.findings:
-        doc.text("No exceptions were confirmed in this run. Identified items remain in the review queue.")
-    for item in pack.findings:
-        doc.gap(4)
-        doc.text(item.title, 11)
-        doc.text(
-            f"{item.rule_code} · {item.status} · {money(item.currency, item.amount)} · confidence {item.confidence}"
-        )
-        why = _why(item.explanation)
-        if why:
-            doc.text(why)
-
-    doc.gap(8)
-    doc.heading("6. Dispositions", 13)
-    if not pack.dispositions:
-        doc.text("No dispositions recorded.")
-    for event in pack.dispositions:
-        when = event.at.isoformat() if event.at else ""
-        rec = money(pack.currency, event.recovered_amount) if event.recovered_amount is not None else ""
-        doc.text(
-            f"{when}  {event.actor}  {event.rule_code}  "
-            f"{event.from_status or '—'} -> {event.to_status}  {event.reason or ''}  {rec}"
         )
 
     doc.gap(8)

@@ -20,7 +20,10 @@ def seed_rules(db: Session) -> None:
             db.add(RuleVersion(rule_code=code, version=1, params=params, active=True))
 
 
-def seed_dev_admin(db: Session, email: str = "admin@example.com", password: str = "change-me-now") -> AppUser:
+def seed_dev_admin(db: Session, email: str = "admin@example.com", password: str | None = None) -> AppUser:
+    import os
+
+    password = password or os.environ.get("STAGING_ADMIN_PASSWORD") or "change-me-now"
     settings = get_settings()
     org = db.scalar(select(Organisation))
     if not org:

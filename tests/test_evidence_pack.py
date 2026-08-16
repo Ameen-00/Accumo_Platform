@@ -71,6 +71,20 @@ def _src(**kw) -> PackInput:
     )
 
 
+def test_pack_leads_with_this_drop_not_limitations():
+    pack = build_pack(
+        _src(
+            row_counts={"invoice": 49, "payment": 109},
+            stats={"invoices": 49, "payments": 109, "open_bank": 7},
+            exceptions=[_exc(status="confirmed", title="real duplicate", amount="38000")],
+        )
+    )
+    html = render_html(pack)
+    assert "49 bills in this drop" in html
+    assert html.index("What you confirmed") < html.index("7. Limitations")
+    assert "No WhatsApp export" in " ".join(pack.limitations)
+
+
 def test_cover_has_the_three_money_figures():
     confirmed_id = uuid4()
     pack = build_pack(

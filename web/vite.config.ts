@@ -7,9 +7,12 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    host: "127.0.0.1",
+    allowedHosts: true,
     proxy: {
       "/auth": "http://127.0.0.1:8000",
       "/imports": "http://127.0.0.1:8000",
+      "/intake": "http://127.0.0.1:8000",
       "/runs": "http://127.0.0.1:8000",
       "/exceptions": "http://127.0.0.1:8000",
       "/reports": "http://127.0.0.1:8000",

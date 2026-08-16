@@ -44,12 +44,13 @@ def persist_findings(
 
     created = updated = 0
     total = 0
+    seen: dict[str, ExceptionRow] = {}
     for rule_code, findings in by_rule.items():
         version = versions[rule_code]
         total += len(findings)
         for finding in findings:
             fp = fingerprint(rule_code, *finding.fingerprint_parts)
-            existing = db.scalar(
+            existing = seen.get(fp) or db.scalar(
                 select(ExceptionRow).where(
                     ExceptionRow.organisation_id == organisation_id,
                     ExceptionRow.fingerprint == fp,
@@ -60,25 +61,27 @@ def persist_findings(
                 existing.explanation = finding.explanation
                 existing.evidence = finding.evidence
                 existing.run_id = run.id
+                existing.title = finding.title
+                seen[fp] = existing
                 updated += 1
                 continue
-            db.add(
-                ExceptionRow(
-                    organisation_id=organisation_id,
-                    run_id=run.id,
-                    rule_code=rule_code,
-                    rule_version_id=version.id,
-                    fingerprint=fp,
-                    status="new",
-                    amount_at_risk=finding.amount_at_risk,
-                    currency=finding.currency,
-                    confidence=finding.confidence,
-                    vendor_identity_id=_maybe_uuid(finding.evidence.get("vendor_identity_id")),
-                    title=finding.title,
-                    explanation=finding.explanation,
-                    evidence=finding.evidence,
-                )
+            row = ExceptionRow(
+                organisation_id=organisation_id,
+                run_id=run.id,
+                rule_code=rule_code,
+                rule_version_id=version.id,
+                fingerprint=fp,
+                status="new",
+                amount_at_risk=finding.amount_at_risk,
+                currency=finding.currency,
+                confidence=finding.confidence,
+                vendor_identity_id=_maybe_uuid(finding.evidence.get("vendor_identity_id")),
+                title=finding.title,
+                explanation=finding.explanation,
+                evidence=finding.evidence,
             )
+            db.add(row)
+            seen[fp] = row
             created += 1
 
     run.status = "complete"

@@ -113,6 +113,27 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.03em; }
   gap: 0.75rem;
   padding: 1rem 1.25rem 0;
 }
+.money.four { grid-template-columns: repeat(4, 1fr); }
+.queues { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.85rem 0 0.6rem; }
+.queues button {
+  background: var(--soft);
+  border: 0;
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  display: inline-flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+.queues button span {
+  background: #fff;
+  border-radius: 999px;
+  padding: 0 0.4rem;
+  font-size: 0.75rem;
+}
+.queues button.on { background: var(--accent); color: #fff; }
+.queues button.on span { color: var(--accent); }
 .money article {
   background: var(--elev);
   border: 1px solid var(--line);
@@ -174,7 +195,7 @@ tr.click { cursor: pointer; }
 }
 @media (max-width: 860px) {
   .detail { grid-template-columns: 1fr; }
-  .money { grid-template-columns: 1fr; }
+  .money, .money.four { grid-template-columns: 1fr; }
 }
 
 .why { font-size: 0.95rem; }
@@ -213,4 +234,54 @@ textarea.field { width: 100%; min-height: 70px; }
   border-radius: 10px;
   color: var(--ink-2);
   font-size: 0.9rem;
+}
+
+.guide {
+  background: #f3f5fb;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  margin: 0 0 1rem;
+}
+.guide h3 {
+  margin: 0 0 0.45rem;
+  font-size: 0.92rem;
+}
+.guide ol {
+  margin: 0;
+  padding-left: 1.15rem;
+}
+.guide li { margin: 0.25rem 0; color: var(--ink-2); font-size: 0.88rem; }
+.guide p { margin: 0.45rem 0 0; color: var(--muted); font-size: 0.82rem; }
+.guide.start-here { background: #eef6f2; border-color: #c8e2d6; }
+.guide.skip-box { background: #fbf3e4; border-color: #e6d3a2; }
+.guide.skip-box ul { margin: 0.45rem 0 0; padding-left: 1.15rem; }
+.guide.skip-box li { color: var(--ink-2); font-size: 0.86rem; }
+.spoken {
+  margin: 0.75rem 1.25rem 0;
+  padding: 0.75rem 1rem;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.next-action {
+  background: #f3f5fb;
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.9rem;
+  margin: 0.6rem 0 0;
+}
+.kind { color: var(--ink-2); }
+.kind .skip { color: var(--muted); }
+.cards-help {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.6rem;
+  margin: 0.75rem 0 0;
+}
+@media (max-width: 860px) {
+  .cards-help { grid-template-columns: 1fr; }
 }

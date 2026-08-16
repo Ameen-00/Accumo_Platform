@@ -121,19 +121,27 @@ def run_dup_exact(db: Session, organisation_id: uuid.UUID, batch_id: uuid.UUID):
     return run_money_rules(db, organisation_id, batch_id)
 
 
-def run_money_rules(db: Session, organisation_id: uuid.UUID, batch_id: uuid.UUID):
+def run_money_rules(
+    db: Session,
+    organisation_id: uuid.UUID,
+    batch_id: uuid.UUID,
+    extra: dict | None = None,
+):
     payments = load_allocated(db, organisation_id, batch_id)
     bank_pays, observations = load_bank_context(db, organisation_id, batch_id)
     bank_findings = list(BankChangePay().run(bank_pays, observations))
+    by_rule = {
+        DupExact.code: list(DupExact().run(payments)),
+        DupFuzzy.code: list(DupFuzzy().run(payments)),
+        BankChangePay.code: bank_findings,
+    }
+    if extra:
+        by_rule.update(extra)
     run = persist_findings(
         db,
         organisation_id=organisation_id,
         batch_id=batch_id,
-        by_rule={
-            DupExact.code: list(DupExact().run(payments)),
-            DupFuzzy.code: list(DupFuzzy().run(payments)),
-            BankChangePay.code: bank_findings,
-        },
+        by_rule=by_rule,
     )
     run.stats = {
         **(run.stats or {}),

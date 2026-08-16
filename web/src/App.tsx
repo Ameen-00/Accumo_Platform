@@ -9,13 +9,23 @@ export function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [ready, setReady] = useState(false);
   const [tab, setTab] = useState<Tab>("import");
-  const [runId, setRunId] = useState<string | null>(null);
+  const [runId, setRunId] = useState<string | null>(() => sessionStorage.getItem("pulse.runId"));
   const [apiDown, setApiDown] = useState(false);
 
   useEffect(() => {
     api
       .me()
-      .then(setMe)
+      .then(async (user) => {
+        setMe(user);
+        if (runId) return;
+        try {
+          const latest = await api.latestRun();
+          setRunId(latest.id);
+          sessionStorage.setItem("pulse.runId", latest.id);
+        } catch {
+          /* first visit — no run yet */
+        }
+      })
       .catch((err) => {
         if (err instanceof ApiError && err.status !== 401) setApiDown(true);
       })
@@ -35,10 +45,10 @@ export function App() {
         </div>
         <nav className="tabs">
           <button className={tab === "import" ? "on" : ""} onClick={() => setTab("import")}>
-            1. Load books
+            1. Load
           </button>
           <button className={tab === "findings" ? "on" : ""} onClick={() => setTab("findings")}>
-            2. Findings
+            2. Review
           </button>
         </nav>
         <div className="btn-row">
@@ -58,6 +68,7 @@ export function App() {
       {tab === "import" ? (
         <ImportDesk
           onRan={(id) => {
+            sessionStorage.setItem("pulse.runId", id);
             setRunId(id);
             setTab("findings");
           }}
@@ -93,7 +104,10 @@ function Login({ onIn, apiDown }: { onIn: (m: Me) => void; apiDown: boolean }) {
         }}
       >
         <div className="mark">Pulse</div>
-        <p className="lead">Load the books. Decide what is real. Download a pack a partner can attach.</p>
+        <p className="lead">
+          Drop the files you have. Pulse reads them and asks you questions. You confirm what is
+          real. Nothing is booked until you say so.
+        </p>
         {apiDown && (
           <p className="err">
             The API is not reachable. Start Postgres + the API, then refresh. This screen is not

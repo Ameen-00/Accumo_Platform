@@ -1,0 +1,60 @@
+# Staging for Arjun. Build the web first:  cd web ; npm run build
+# Then from repo root:
+#   docker compose -f docker/docker-compose.staging.yml up -d --build
+# Open http://<box-ip>/
+# Never put a customer zip in the image. He uploads after sign-in.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: pulse
+      POSTGRES_PASSWORD: pulse
+      POSTGRES_DB: pulse
+    volumes:
+      - pulse_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pulse"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/api.Dockerfile
+    env_file: ../.env
+    environment:
+      DATABASE_URL: postgresql+psycopg://pulse:pulse@postgres:5432/pulse
+      PYTHONPATH: /app/packages/foundation:/app/packages/canonical:/app/packages/ingest:/app/packages/rules:/app/apps/pulse:/app/apps/api
+      UPLOAD_DIR: /data/uploads
+      REPORT_DIR: /data/reports
+      ENV: staging
+      PUBLIC_HOST: staging.pulse.accumo.co
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - pulse_files:/data
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.staging:/etc/caddy/Caddyfile:ro
+      - ../web/dist:/srv:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  pulse_pg:
+  pulse_files:
+  caddy_data:
+  caddy_config:

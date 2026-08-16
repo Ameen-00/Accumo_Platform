@@ -146,6 +146,7 @@ def gather(db: Session, run: Run, generated_by: str) -> PackInput:
         events=events,
         bank_change_assessable=bool(stats.get("bank_change_assessable")),
         has_change_log=False,
+        stats=stats,
     )
 
 

@@ -1,5 +1,19 @@
 import { useState } from "react";
-import { api, type FileUploadResult } from "./api";
+import { api, type FileUploadResult, type IntakePreview } from "./api";
+
+const KIND_LABEL: Record<string, string> = {
+  invoice_pdf: "Supplier invoice",
+  document_pdf: "PDF document",
+  books_export: "Books / ledger (Zoho)",
+  bank_statement: "Bank statement",
+  bank_pdf: "Bank statement PDF",
+  gstr2b: "GSTR-2B (GST portal)",
+  training_pack: "Training file",
+  workpaper: "Not a supplier invoice",
+  tabular: "Spreadsheet",
+  zip: "Zip of mixed files",
+  unknown: "Unrecognised",
+};
 
 const SLOTS = [
   { id: "vendor", label: "1. Vendors", hint: "Name and code / GSTIN if you have it", need: true },
@@ -45,13 +59,151 @@ export function ImportDesk({ onRan }: { onRan: (runId: string) => void }) {
     return created.id;
   }
 
+  const [intake, setIntake] = useState<IntakePreview | null>(null);
+
   const have = new Set(files.map((f) => f.entity));
   const ready = ["vendor", "invoice", "payment"].every((id) => have.has(id));
+  const skipped = intake?.files.filter((f) => f.skip) ?? [];
 
   return (
     <div className="main">
       <section className="panel">
-        <h2>Load the books</h2>
+        <h2>1. Drop whatever you have</h2>
+        <div className="guide">
+          <h3>First time here?</h3>
+          <ol>
+            <li>Drop a zip, invoice PDFs, a bank statement, a GSTR-2B, or a Zoho “Account Transactions” PDF.</li>
+            <li>Pulse reads the files and shows what it understood. It does not book anything.</li>
+            <li>
+              Press <strong>Review findings</strong>. Each row on the next screen is a question for you —
+              confirm if it is real, dismiss if it is not.
+            </li>
+          </ol>
+          <p>A finding is a question, not a booked entry, and not money already saved.</p>
+        </div>
+        <label className="btn file-btn">
+          Choose files
+          <input
+            type="file"
+            multiple
+            hidden
+            disabled={busy}
+            onChange={async (ev) => {
+              const list = ev.target.files ? Array.from(ev.target.files) : [];
+              ev.target.value = "";
+              if (!list.length) return;
+              setBusy(true);
+              setErr(null);
+              try {
+                const preview = await api.dropAnything(list);
+                setIntake(preview);
+                setMsg(`Read ${list.length} file(s). Check the list, then press Review findings.`);
+              } catch (ex) {
+                setErr(ex instanceof Error ? ex.message : "Could not read those files");
+              } finally {
+                setBusy(false);
+              }
+            }}
+          />
+        </label>
+        {intake && (
+          <div style={{ marginTop: "1rem" }}>
+            <p>
+              <strong>
+                {intake.mode === "zero_books"
+                  ? "Reconstructing from documents"
+                  : intake.mode === "proper_books"
+                    ? "Reading exported books"
+                    : intake.mode === "mixed"
+                      ? "Documents + books"
+                      : intake.mode.replaceAll("_", " ")}
+              </strong>{" "}
+              — {intake.summary}
+            </p>
+            <p className="hint">
+              {intake.invoices.length} bills
+              {intake.ledger_invoices ? ` (${intake.ledger_invoices} from the ledger)` : ""} ·{" "}
+              {intake.bank_out} bank payments
+              {intake.ledger_payments ? ` · ${intake.ledger_payments} ledger payments` : ""} ·{" "}
+              {intake.two_b} GST portal rows
+              {intake.needs_human_invoices
+                ? ` · ${intake.needs_human_invoices} bills still need a closer look`
+                : ""}
+            </p>
+            <table>
+              <thead>
+                <tr>
+                  <th>File</th>
+                  <th>Pulse read it as</th>
+                </tr>
+              </thead>
+              <tbody>
+                {intake.files.map((f) => (
+                  <tr key={f.filename}>
+                    <td>{f.filename}</td>
+                    <td className="kind">
+                      {KIND_LABEL[f.kind] ?? f.kind.replaceAll("_", " ")}
+                      {f.skip ? (
+                        <span className="skip"> — not an invoice. {f.reason}</span>
+                      ) : f.reason ? (
+                        ` — ${f.reason}`
+                      ) : (
+                        ""
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {skipped.length > 0 && (
+              <div className="guide skip-box">
+                <h3>Not treated as invoices — would become fake bills</h3>
+                <p>
+                  Pulse left these out on purpose. They are ITR papers, profiles, or training files.
+                  If they were booked as supplier invoices, the desk would show money that is not a
+                  payable.
+                </p>
+                <ul>
+                  {skipped.map((f) => (
+                    <li key={f.filename}>
+                      <strong>{f.filename}</strong> — {f.reason}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {intake.limitations.length > 0 && (
+              <ul className="hint">
+                {intake.limitations.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            )}
+            <button
+              className="btn"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                setErr(null);
+                try {
+                  const res = await api.commitIntake(intake.batch_id);
+                  onRan(res.run_id);
+                } catch (ex) {
+                  setErr(ex instanceof Error ? ex.message : "Could not run");
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              {busy ? "Working…" : "Review findings →"}
+            </button>
+            {err && <p className="err">{err}</p>}
+          </div>
+        )}
+      </section>
+
+      <section className="panel">
+        <h2>Or map three books files</h2>
         <p className="hint" style={{ marginTop: 0 }}>
           Three files. We guess the columns; you only fix a wrong guess. If a date looks like
           03/07/2026, say whether the day comes first.
