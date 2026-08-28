@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { ApiError, api, type Me } from "./api";
 import { Findings } from "./Findings";
 import { ImportDesk } from "./ImportDesk";
+import { Positions } from "./Positions";
 
-type Tab = "import" | "findings";
+type Tab = "import" | "suppliers" | "findings";
 
 export function App() {
   const [me, setMe] = useState<Me | null>(null);
@@ -47,8 +48,11 @@ export function App() {
           <button className={tab === "import" ? "on" : ""} onClick={() => setTab("import")}>
             1. Load
           </button>
+          <button className={tab === "suppliers" ? "on" : ""} onClick={() => setTab("suppliers")}>
+            2. Suppliers
+          </button>
           <button className={tab === "findings" ? "on" : ""} onClick={() => setTab("findings")}>
-            2. Review
+            3. Detail
           </button>
         </nav>
         <div className="btn-row">
@@ -70,9 +74,11 @@ export function App() {
           onRan={(id) => {
             sessionStorage.setItem("pulse.runId", id);
             setRunId(id);
-            setTab("findings");
+            setTab("suppliers");
           }}
         />
+      ) : tab === "suppliers" ? (
+        <Positions />
       ) : (
         <Findings runId={runId} />
       )}

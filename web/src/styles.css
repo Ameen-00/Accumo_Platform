@@ -285,3 +285,40 @@ textarea.field { width: 100%; min-height: 70px; }
 @media (max-width: 860px) {
   .cards-help { grid-template-columns: 1fr; }
 }
+
+/* ---------------------------------------------- supplier positions (v2) --
+   The landing screen. One row per supplier; transactions only on drill-down.
+   Colour carries meaning here, so each state also carries a word -- a red row
+   with no label is useless to anyone who cannot distinguish the shades. */
+.pos-tbl th { text-align: left; font-weight: 650; }
+.pos-tbl td { vertical-align: top; }
+
+.pos-pill {
+  display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; letter-spacing: .02em;
+  text-transform: lowercase; white-space: nowrap;
+}
+.pos-pill.pos-clear      { background: #E4F5EC; color: #146B45; }
+.pos-pill.pos-difference { background: #FDE8E2; color: #A33712; }
+.pos-pill.pos-waiting    { background: #FDF3DC; color: #8A6412; }
+
+.pos-row.pos-difference td:first-child { box-shadow: inset 3px 0 0 #E2603A; }
+.pos-row.pos-waiting    td:first-child { box-shadow: inset 3px 0 0 #E3B341; }
+
+.pos-figures {
+  display: flex; flex-wrap: wrap; gap: 1.5rem;
+  margin: 1rem 0 1.25rem; padding: .9rem 1rem;
+  background: rgba(0,0,0,.03); border-radius: 12px;
+}
+.pos-figures > div { display: flex; flex-direction: column; gap: 2px; }
+.pos-figures .k {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .06em; opacity: .6;
+}
+.pos-figures .v { font-size: 1.05rem; font-weight: 650; }
+
+@media (max-width: 720px) {
+  .pos-tbl thead { display: none; }
+  .pos-tbl tr { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: .6rem 0; }
+  .pos-tbl td { border: 0; padding: 2px 0; }
+  .pos-figures { gap: 1rem; }
+}

@@ -75,6 +75,39 @@ export type FileUploadResult = {
   missing: string[];
 };
 
+export type SupplierPosition = {
+  identity_id: string;
+  name: string;
+  currency: string;
+  headline: string;
+  state: "clear" | "difference" | "waiting";
+  invoiced: string;
+  paid: string;
+  credit_notes: string;
+  difference: string;
+  gst_difference: string;
+  invoice_count: number;
+  payment_count: number;
+  unexplained_payments: number;
+  open_questions: number;
+  waiting_on: string | null;
+};
+
+export type PositionList = {
+  headline: string;
+  checked: number;
+  clear: number;
+  differences: number;
+  waiting: number;
+  positions: SupplierPosition[];
+};
+
+export type PositionDetail = SupplierPosition & {
+  invoices: { number: string; date: string | null; amount: string; currency: string }[];
+  payments: { date: string | null; amount: string; currency: string; reference: string | null }[];
+  credit_notes_list: { ref: string; date: string | null; amount: string; applied: boolean }[];
+};
+
 async function req<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
@@ -225,6 +258,11 @@ export const api = {
 
   pendingIdentities: () =>
     req<{ pending: { id: string; canonical_name: string; members: { name: string }[] }[] }>("/identities/pending"),
+
+  positions: () => req<PositionList>("/positions"),
+
+  positionDetail: (identityId: string) =>
+    req<PositionDetail>(`/positions/${identityId}`),
 
   makePack: (runId: string) =>
     req<{ id: string; status: string; filename: string; sha256: string }>("/reports/evidence-pack", {
